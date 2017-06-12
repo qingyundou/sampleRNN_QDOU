@@ -105,7 +105,7 @@ def get_args():
     parser.add_argument('--which_set', help='ONOM, BLIZZ, or MUSIC, or SPEECH',
             choices=['ONOM', 'BLIZZ', 'MUSIC', 'SPEECH'], required=True)
     parser.add_argument('--batch_size', help='size of mini-batch',
-            type=check_positive, choices=[64, 128, 256], required=True)
+            type=check_positive, choices=[1, 64, 128, 256], required=True)
 
     parser.add_argument('--debug', help='Debug mode', required=False, default=False, action='store_true')
     # NEW
@@ -160,9 +160,10 @@ TRAIN_MODE = 'time' # To use PRINT_TIME and STOP_TIME
 PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every N iterations.
 STOP_ITERS = 100000 # Stop after this many iterations
 # TODO:
-PRINT_TIME = 90*60 # Print cost, generate samples, save model checkpoint every N seconds.
+PRINT_TIME = 6*60*60 #every 6 hours
+# PRINT_TIME = 90*60 # Print cost, generate samples, save model checkpoint every N seconds.
 STOP_TIME = 60*60*24*3 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
-N_SEQS = 20  # Number of samples to generate every time monitoring.
+N_SEQS = 10  # Number of samples to generate every time monitoring.
 # TODO:
 RESULTS_DIR = 'results_2t'
 FOLDER_PREFIX = os.path.join(RESULTS_DIR, tag)
