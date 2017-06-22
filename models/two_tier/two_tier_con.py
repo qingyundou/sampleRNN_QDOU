@@ -105,13 +105,13 @@ def get_args():
     parser.add_argument('--which_set', help='ONOM, BLIZZ, or MUSIC, or SPEECH',
             choices=['ONOM', 'BLIZZ', 'MUSIC', 'SPEECH'], required=True)
     parser.add_argument('--batch_size', help='size of mini-batch',
-            type=check_positive, choices=[1, 64, 128, 256], required=True)
+            type=check_positive, choices=[20, 64, 128, 256], required=True)
 
     parser.add_argument('--debug', help='Debug mode', required=False, default=False, action='store_true')
     # NEW
     parser.add_argument('--resume', help='Resume the same model from the last checkpoint. Order of params are important. [for now]',\
             required=False, default=False, action='store_true')
-    
+
     args = parser.parse_args()
 
     # NEW
@@ -160,8 +160,7 @@ TRAIN_MODE = 'time' # To use PRINT_TIME and STOP_TIME
 PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every N iterations.
 STOP_ITERS = 100000 # Stop after this many iterations
 # TODO:
-PRINT_TIME = 6*60*60 #every 6 hours
-# PRINT_TIME = 90*60 # Print cost, generate samples, save model checkpoint every N seconds.
+PRINT_TIME = 6*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
 STOP_TIME = 60*60*24*3 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
 N_SEQS = 10  # Number of samples to generate every time monitoring.
 # TODO:
@@ -170,6 +169,10 @@ FOLDER_PREFIX = os.path.join(RESULTS_DIR, tag)
 SEQ_LEN = N_FRAMES * FRAME_SIZE # Total length (# of samples) of each truncated BPTT sequence
 Q_ZERO = numpy.int32(Q_LEVELS//2) # Discrete value correponding to zero amplitude
 
+LAB_SIZE = 80 #one label covers 80 points on waveform
+LAB_PERIOD = float(0.005) #one label covers 0.005s ~ 200Hz
+LAB_DIM = 601
+UP_RATE = LAB_SIZE/FRAME_SIZE
 
 epoch_str = 'epoch'
 iter_str = 'iter'
@@ -221,9 +224,9 @@ elif WHICH_SET == 'MUSIC':
     from datasets.dataset import music_valid_feed_epoch as valid_feeder
     from datasets.dataset import music_test_feed_epoch  as test_feeder
 elif WHICH_SET == 'SPEECH':
-    from datasets.dataset import speech_train_feed_epoch as train_feeder
-    from datasets.dataset import speech_valid_feed_epoch as valid_feeder
-    from datasets.dataset import speech_test_feed_epoch  as test_feeder
+    from datasets.dataset_con import speech_train_feed_epoch as train_feeder
+    from datasets.dataset_con import speech_valid_feed_epoch as valid_feeder
+    from datasets.dataset_con import speech_test_feed_epoch  as test_feeder
 
 
 def load_data(data_feeder):
@@ -231,15 +234,16 @@ def load_data(data_feeder):
     Helper function to deal with interface of different datasets.
     `data_feeder` should be `train_feeder`, `valid_feeder`, or `test_feeder`.
     """
-    return data_feeder(BATCH_SIZE,
+    return data_feeder(FRAME_SIZE,
+                       BATCH_SIZE,
                        SEQ_LEN,
                        OVERLAP,
                        Q_LEVELS,
                        Q_ZERO,
                        Q_TYPE)
-
+print('----got to def---')
 ### Creating computation graph ###
-def frame_level_rnn(input_sequences, h0, reset):
+def frame_level_rnn(input_sequences, input_sequences_lab, h0, reset):
     """
     input_sequences.shape: (batch size, n frames * FRAME_SIZE)
     h0.shape:              (batch size, N_RNN, DIM)
@@ -247,12 +251,20 @@ def frame_level_rnn(input_sequences, h0, reset):
 
     output.shape:          (batch size, n frames * FRAME_SIZE, DIM)
     """
+    
+#    print('-----------')
+#    print(type(input_sequences))
+#    print(input_sequences.shape)
+#    print('-----------')
+    
     frames = input_sequences.reshape((
         input_sequences.shape[0],
         input_sequences.shape[1] // FRAME_SIZE,
         FRAME_SIZE
     ))
-
+    
+    frames = T.concatenate([frames, input_sequences_lab], axis=2)
+    
     # Rescale frames from ints in [0, Q_LEVELS) to floats in [-2, 2]
     # (a reasonable range to pass as inputs to the RNN)
     frames = (frames.astype('float32') / lib.floatX(Q_LEVELS/2)) - lib.floatX(1)
@@ -275,7 +287,7 @@ def frame_level_rnn(input_sequences, h0, reset):
     if RNN_TYPE == 'GRU':
         rnns_out, last_hidden = lib.ops.stackedGRU('FrameLevel.GRU',
                                                    N_RNN,
-                                                   FRAME_SIZE,
+                                                   FRAME_SIZE+LAB_DIM,
                                                    DIM,
                                                    frames,
                                                    h0=h0,
@@ -284,7 +296,7 @@ def frame_level_rnn(input_sequences, h0, reset):
     elif RNN_TYPE == 'LSTM':
         rnns_out, last_hidden = lib.ops.stackedLSTM('FrameLevel.LSTM',
                                                     N_RNN,
-                                                    FRAME_SIZE,
+                                                    FRAME_SIZE+LAB_DIM,
                                                     DIM,
                                                     frames,
                                                     h0=h0,
@@ -374,10 +386,12 @@ def sample_level_predictor(frame_level_outputs, prev_samples):
                          weightnorm=WEIGHT_NORM)
     return out
 
+print('----got to T var---')
 sequences = T.imatrix('sequences')
 h0        = T.tensor3('h0')
 reset     = T.iscalar('reset')
 mask      = T.matrix('mask')
+sequences_lab      = T.tensor3('sequences_lab')
 
 if args.debug:
     # Solely for debugging purposes.
@@ -393,7 +407,7 @@ target_sequences = sequences[:, FRAME_SIZE:]
 target_mask = mask[:, FRAME_SIZE:]
 
 frame_level_outputs, new_h0 =\
-    frame_level_rnn(input_sequences, h0, reset)
+    frame_level_rnn(input_sequences, sequences_lab, h0, reset)
 
 prev_samples = sequences[:, :-1]
 prev_samples = prev_samples.reshape((1, BATCH_SIZE, 1, -1))
@@ -436,9 +450,10 @@ grads = [T.clip(g, lib.floatX(-GRAD_CLIP), lib.floatX(GRAD_CLIP)) for g in grads
 
 updates = lasagne.updates.adam(grads, params, learning_rate=LEARNING_RATE)
 
+print('----got to fn---')
 # Training function
 train_fn = theano.function(
-    [sequences, h0, reset, mask],
+    [sequences, sequences_lab, h0, reset, mask],
     [cost, new_h0],
     updates=updates,
     on_unused_input='warn'
@@ -446,15 +461,15 @@ train_fn = theano.function(
 
 # Validation and Test function, hence no updates
 test_fn = theano.function(
-    [sequences, h0, reset, mask],
+    [sequences, sequences_lab, h0, reset, mask],
     [cost, new_h0],
     on_unused_input='warn'
 )
 
 # Sampling at frame level
 frame_level_generate_fn = theano.function(
-    [sequences, h0, reset],
-    frame_level_rnn(sequences, h0, reset),
+    [sequences, sequences_lab, h0, reset],
+    frame_level_rnn(sequences, sequences_lab, h0, reset),
     on_unused_input='warn'
 )
 
@@ -479,6 +494,8 @@ fixed_rand_h0 = numpy.random.rand(N_SEQS//2, N_RNN, H0_MULT*DIM)
 fixed_rand_h0 -= 0.5
 fixed_rand_h0 = fixed_rand_h0.astype('float32')
 
+from datasets.dataset_con import upsample
+up_rate = LAB_SIZE/FRAME_SIZE
 def generate_and_save_samples(tag):
     def write_audio_file(name, data):
         data = data.astype('float32')
@@ -498,7 +515,10 @@ def generate_and_save_samples(tag):
 
     samples = numpy.zeros((N_SEQS, LENGTH), dtype='int32')
     samples[:, :FRAME_SIZE] = Q_ZERO
-
+    samples_lab = numpy.load('datasets/speech/manuAlign_float32/speech_test_lab.npy')
+    samples_lab = samples_lab[:N_SEQS]
+    samples_lab = upsample(samples_lab,up_rate).astype('float32')
+    
     # First half zero, others fixed random at each checkpoint
     h0 = numpy.zeros(
             (N_SEQS-fixed_rand_h0.shape[0], N_RNN, H0_MULT*DIM),
@@ -512,6 +532,7 @@ def generate_and_save_samples(tag):
         if t % FRAME_SIZE == 0:
             frame_level_outputs, h0 = frame_level_generate_fn(
                 samples[:, t-FRAME_SIZE:t],
+                samples_lab[:,(t-FRAME_SIZE)//FRAME_SIZE:(t-FRAME_SIZE)//FRAME_SIZE+1],
                 h0,
                 #numpy.full((N_SEQS, ), (t == FRAME_SIZE), dtype='int32'),
                 numpy.int32(t == FRAME_SIZE)
@@ -550,8 +571,8 @@ def monitor(data_feeder):
     _h0 = numpy.zeros((BATCH_SIZE, N_RNN, H0_MULT*DIM), dtype='float32')
     _costs = []
     _data_feeder = load_data(data_feeder)
-    for _seqs, _reset, _mask in _data_feeder:
-        _cost, _h0 = test_fn(_seqs, _h0, _reset, _mask)
+    for _seqs, _reset, _mask, _seqs_lab in _data_feeder:
+        _cost, _h0 = test_fn(_seqs, _seqs_lab, _h0, _reset, _mask)
         _costs.append(_cost)
 
     return numpy.mean(_costs), time() - _total_time
@@ -623,10 +644,10 @@ while True:
         end_of_batch = True
         print "[Another epoch]",
 
-    seqs, reset, mask = mini_batch
-
+    seqs, reset, mask, seqs_lab = mini_batch
+    
     start_time = time()
-    cost, h0 = train_fn(seqs, h0, reset, mask)
+    cost, h0 = train_fn(seqs, seqs_lab, h0, reset, mask)
     total_time += time() - start_time
     #print "This cost:", cost, "This h0.mean()", h0.mean()
 
