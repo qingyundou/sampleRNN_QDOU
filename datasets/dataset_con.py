@@ -21,7 +21,8 @@ __base = [
 __blizz_file = 'Blizzard/Blizzard9k_{}.npy'  # in float16 8secs*16000samples/sec
 __music_file = 'music/music_{}.npy'  # in float16 8secs*16000samples/sec
 __huck_file = 'Huckleberry/Huckleberry_{}.npy'  # in float16 8secs*16000samples/sec
-__speech_file = 'speech/manuAlign_float32/speech_{}.npy'  # in float16 8secs*16000samples/sec
+__speech_file = 'speech/manuAlign_float32_cutEnd/speech_{}.npy'  # in float16 8secs*16000samples/sec
+__speech_file_lab = 'speech/lab_norm/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
 
 __blizz_train_mean_std = np.array([0.0008558356760380169,
                                    0.098437514304141299],
@@ -39,10 +40,6 @@ __speech_train_mean_std = np.array([6.6694896289095623e-07,
 __train = lambda s: s.format('train')
 __valid = lambda s: s.format('valid')
 __test = lambda s: s.format('test')
-
-__train_lab = lambda s: s.format('train_lab')
-__valid_lab = lambda s: s.format('valid_lab')
-__test_lab = lambda s: s.format('test_lab')
 
 
 def find_dataset(filename):
@@ -133,8 +130,24 @@ def __batch_quantize(data, q_levels, q_type):
     """
     One of 'linear', 'a-law', 'mu-law' for q_type.
     """
-    data = data.astype('float64')
+    data = data.astype('float32')
     data = __normalize(data)
+    if q_type == 'linear':
+        return __linear_quantize(data, q_levels)
+    if q_type == 'a-law':
+        return __a_law_quantize(data)
+    if q_type == 'mu-law':
+        # from [0, 1] to [-1, 1]
+        data = 2.*data-1.
+        # Automatically quantized to 256 bins.
+        return __mu_law_quantize(data)
+    raise NotImplementedError
+    
+def __batch_quantize_lab(data, q_levels, q_type):
+    """
+    One of 'linear', 'a-law', 'mu-law' for q_type.
+    """
+    data = data.astype('float32')
     if q_type == 'linear':
         return __linear_quantize(data, q_levels)
     if q_type == 'a-law':
@@ -244,14 +257,14 @@ def __speech_feed_epoch(files,
         #batch_seq_len = __round_to(batch_seq_len, seq_len)
         
         ##label##
-        batch_seq_len_lab = len(bch_lab[0])  # should be 8*16000 / 80
+        batch_seq_len_lab = len(bch_lab[0])  # should be 8*16000 / 80 * up_rate
         #batch_seq_len_lab = __round_to(batch_seq_len_lab, seq_len_lab)
         
         #deal with ending
 
         batch = numpy.zeros(
             (batch_size, batch_seq_len),
-            dtype='float64'
+            dtype='float32'
         )
         
         ##label##
@@ -277,6 +290,7 @@ def __speech_feed_epoch(files,
         
         if not real_valued:
             batch = __batch_quantize(batch, q_levels, q_type)
+            batch_lab = __batch_quantize_lab(batch_lab, q_levels, q_type)
 
             batch = numpy.concatenate([
                 numpy.full((batch_size, overlap), q_zero, dtype='int32'),
@@ -332,9 +346,10 @@ def speech_train_feed_epoch(*args):
     # Load train set
     data_path = find_dataset(__train(__speech_file))
     files = numpy.load(data_path)
-    data_path = find_dataset(__train_lab(__speech_file))
+    data_path = find_dataset(__train(__speech_file_lab))
     files_lab = numpy.load(data_path)
     generator = __speech_feed_epoch(files, files_lab, *args)
+#    generator = __speech_feed_epoch(files[:40], files_lab[:40], *args)
     return generator
 
 def speech_valid_feed_epoch(*args):
@@ -344,7 +359,7 @@ def speech_valid_feed_epoch(*args):
     """
     data_path = find_dataset(__valid(__speech_file))
     files = numpy.load(data_path)
-    data_path = find_dataset(__valid_lab(__speech_file))
+    data_path = find_dataset(__valid(__speech_file_lab))
     files_lab = numpy.load(data_path)
     generator = __speech_feed_epoch(files, files_lab, *args)
     return generator
@@ -356,7 +371,7 @@ def speech_test_feed_epoch(*args):
     """
     data_path = find_dataset(__test(__speech_file))
     files = numpy.load(data_path)
-    data_path = find_dataset(__test_lab(__speech_file))
+    data_path = find_dataset(__test(__speech_file_lab))
     files_lab = numpy.load(data_path)
     generator = __speech_feed_epoch(files, files_lab, *args)
     return generator

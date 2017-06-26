@@ -241,6 +241,14 @@ def load_data(data_feeder):
                        Q_LEVELS,
                        Q_ZERO,
                        Q_TYPE)
+def load_data_gen(data_feeder,SEQ_LEN_gen):
+    return data_feeder(FRAME_SIZE,
+                       BATCH_SIZE,
+                       SEQ_LEN_gen,
+                       OVERLAP,
+                       Q_LEVELS,
+                       Q_ZERO,
+                       Q_TYPE)
 print('----got to def---')
 ### Creating computation graph ###
 def frame_level_rnn(input_sequences, input_sequences_lab, h0, reset):
@@ -281,7 +289,9 @@ def frame_level_rnn(input_sequences, input_sequences_lab, h0, reset):
     learned_h0 = T.alloc(learned_h0, h0.shape[0], N_RNN, H0_MULT*DIM)
     learned_h0 = T.unbroadcast(learned_h0, 0, 1, 2)
     h0 = theano.ifelse.ifelse(reset, learned_h0, h0)
+    
 
+    
     # Handling RNN_TYPE
     # Handling SKIP_CONN
     if RNN_TYPE == 'GRU':
@@ -303,7 +313,7 @@ def frame_level_rnn(input_sequences, input_sequences_lab, h0, reset):
                                                     weightnorm=WEIGHT_NORM,
                                                     skip_conn=SKIP_CONN)
 
-    # rnns_out (bs, seqlen, dim) (128, 64, 512)
+    # rnns_out (bs, seqlen, dim) (128, 64, 512) #seqlen ~ N_FRAME = 64 = frames.shape[1]
     output = lib.ops.Linear(
         'FrameLevel.Output',
         DIM,
@@ -391,7 +401,8 @@ sequences = T.imatrix('sequences')
 h0        = T.tensor3('h0')
 reset     = T.iscalar('reset')
 mask      = T.matrix('mask')
-sequences_lab      = T.tensor3('sequences_lab')
+#sequences_lab      = T.tensor3('sequences_lab')
+sequences_lab      = T.itensor3('sequences_lab')
 
 if args.debug:
     # Solely for debugging purposes.
@@ -487,12 +498,7 @@ sample_level_generate_fn = theano.function(
     on_unused_input='warn'
 )
 
-# Uniform [-0.5, 0.5) for half of initial state for generated samples
-# to study the behaviour of the model and also to introduce some diversity
-# to samples in a simple way. [it's disabled for now]
-fixed_rand_h0 = numpy.random.rand(N_SEQS//2, N_RNN, H0_MULT*DIM)
-fixed_rand_h0 -= 0.5
-fixed_rand_h0 = fixed_rand_h0.astype('float32')
+
 
 from datasets.dataset_con import upsample
 up_rate = LAB_SIZE/FRAME_SIZE
@@ -515,24 +521,28 @@ def generate_and_save_samples(tag):
 
     samples = numpy.zeros((N_SEQS, LENGTH), dtype='int32')
     samples[:, :FRAME_SIZE] = Q_ZERO
-    samples_lab = numpy.load('datasets/speech/manuAlign_float32/speech_test_lab.npy')
-    samples_lab = samples_lab[:N_SEQS]
-    samples_lab = upsample(samples_lab,up_rate).astype('float32')
+    testData_feeder = load_data_gen(test_feeder,LENGTH)
+    mini_batch = testData_feeder.next()
+    _, _, _, seqs_lab = mini_batch
+    samples_lab = seqs_lab[:N_SEQS]
     
     # First half zero, others fixed random at each checkpoint
     h0 = numpy.zeros(
-            (N_SEQS-fixed_rand_h0.shape[0], N_RNN, H0_MULT*DIM),
+            (N_SEQS, N_RNN, H0_MULT*DIM),
             dtype='float32'
     )
-    h0 = numpy.concatenate((h0, fixed_rand_h0), axis=0)
+    
     frame_level_outputs = None
 
     for t in xrange(FRAME_SIZE, LENGTH):
 
         if t % FRAME_SIZE == 0:
+            tmp = samples_lab[:,(t-FRAME_SIZE)//FRAME_SIZE,:]
+            tmp = tmp.reshape(tmp.shape[0],1,tmp.shape[1])
+            
             frame_level_outputs, h0 = frame_level_generate_fn(
                 samples[:, t-FRAME_SIZE:t],
-                samples_lab[:,(t-FRAME_SIZE)//FRAME_SIZE:(t-FRAME_SIZE)//FRAME_SIZE+1],
+                tmp,
                 h0,
                 #numpy.full((N_SEQS, ), (t == FRAME_SIZE), dtype='int32'),
                 numpy.int32(t == FRAME_SIZE)
@@ -622,6 +632,8 @@ if RESUME:
 
     lib.load_params(res_path)
     print "Parameters from last available checkpoint loaded."
+
+
 
 while True:
     # THIS IS ONE ITERATION
