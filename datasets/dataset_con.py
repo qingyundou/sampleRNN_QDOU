@@ -22,7 +22,7 @@ __blizz_file = 'Blizzard/Blizzard9k_{}.npy'  # in float16 8secs*16000samples/sec
 __music_file = 'music/music_{}.npy'  # in float16 8secs*16000samples/sec
 __huck_file = 'Huckleberry/Huckleberry_{}.npy'  # in float16 8secs*16000samples/sec
 __speech_file = 'speech/manuAlign_float32_cutEnd/speech_{}.npy'  # in float16 8secs*16000samples/sec
-__speech_file_lab = 'speech/lab_norm/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
+__speech_file_lab = 'speech/lab_norm_01/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
 
 __blizz_train_mean_std = np.array([0.0008558356760380169,
                                    0.098437514304141299],
@@ -249,6 +249,7 @@ def __speech_feed_epoch(files,
     
     up_rate = LAB_SIZE/frame_size
     seq_len_lab = seq_len / lab_len * up_rate #also =seq_len / frame_size
+    batch_init = []
 
     for bch,bch_lab in zip(batches,batches_lab):
         # batch_seq_len = length of longest sequence in the batch, rounded up to
@@ -261,17 +262,10 @@ def __speech_feed_epoch(files,
         #batch_seq_len_lab = __round_to(batch_seq_len_lab, seq_len_lab)
         
         #deal with ending
-
         batch = numpy.zeros(
             (batch_size, batch_seq_len),
             dtype='float32'
         )
-        
-        ##label##
-        # batch_lab = numpy.zeros(
-            # (batch_size, batch_seq_len_lab, 601),
-            # dtype='float32'
-        # )
 
         mask = numpy.ones(batch.shape, dtype='float32')
 
@@ -291,16 +285,21 @@ def __speech_feed_epoch(files,
         if not real_valued:
             batch = __batch_quantize(batch, q_levels, q_type)
             batch_lab = __batch_quantize_lab(batch_lab, q_levels, q_type)
-
+            
+            if batch_init == []: batch_init = batch[:,:overlap]
+            #if batch_init==[]: batch_init = numpy.full((batch_size, overlap), q_zero, dtype='int32')
             batch = numpy.concatenate([
-                numpy.full((batch_size, overlap), q_zero, dtype='int32'),
+                batch_init,
                 batch
             ], axis=1)
         else:
             batch -= __speech_train_mean_std[0]
             batch /= __speech_train_mean_std[1]
+            
+            if batch_init == []: batch_init = batch[:,:overlap]
+            #if batch_init==[]: batch_init = numpy.full((batch_size, overlap), 0, dtype='float32')
             batch = numpy.concatenate([
-                numpy.full((batch_size, overlap), 0, dtype='float32'),
+                batch_init,
                 batch
             ], axis=1).astype('float32')
 
@@ -309,6 +308,8 @@ def __speech_feed_epoch(files,
             mask
         ], axis=1)
 
+        batch_init = batch[:,-overlap:]
+        
         for i in xrange(batch_seq_len // seq_len):
             reset = numpy.int32(i==0)
             subbatch = batch[:, i*seq_len : (i+1)*seq_len + overlap]

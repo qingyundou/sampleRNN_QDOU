@@ -519,12 +519,14 @@ def generate_and_save_samples(tag):
     N_SECS = 5
     LENGTH = N_SECS*BITRATE if not args.debug else 100
 
-    samples = numpy.zeros((N_SEQS, LENGTH), dtype='int32')
-    samples[:, :FRAME_SIZE] = Q_ZERO
-    testData_feeder = load_data_gen(test_feeder,LENGTH)
+    #samples = numpy.zeros((N_SEQS, LENGTH), dtype='int32')
+    #samples[:, :FRAME_SIZE] = Q_ZERO
+    
+    testData_feeder = load_data_gen(test_feeder,LENGTH+LAB_SIZE)
     mini_batch = testData_feeder.next()
-    _, _, _, seqs_lab = mini_batch
-    samples_lab = seqs_lab[:N_SEQS]
+    seqs, _, _, seqs_lab = mini_batch
+    samples = seqs[:N_SEQS,FRAME_SIZE:FRAME_SIZE+LENGTH]
+    samples_lab = seqs_lab[:N_SEQS,1:]
     
     # First half zero, others fixed random at each checkpoint
     h0 = numpy.zeros(
@@ -633,8 +635,9 @@ if RESUME:
     lib.load_params(res_path)
     print "Parameters from last available checkpoint loaded."
 
-
-
+print('debug: sampling')
+generate_and_save_samples(tag)
+print('debug: ok')
 while True:
     # THIS IS ONE ITERATION
     if total_iters % 500 == 0:
