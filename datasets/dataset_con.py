@@ -187,6 +187,7 @@ import scipy.interpolate
 axisIndex = 1
 LAB_PERIOD = 0.005
 LAB_SIZE = 80
+LAB_DIM = 601
 
 def upsample(input_sequences_lab,up_rate):
     L = input_sequences_lab
@@ -236,11 +237,6 @@ def __speech_feed_epoch(files,
     """
     print('---in dataset.py---')
     print(len(batches))
-    print(len(batches_lab))
-    print(batches[0].shape)
-    print(batches[0][0])
-    print(batches[1].shape)
-    print(batches[1][0])
     print('---in dataset.py---')
     """
     
@@ -281,6 +277,7 @@ def __speech_feed_epoch(files,
         #for i, data in enumerate(bch_lab):
         #	batch_lab[i, :len(data)] = data
         batch_lab = upsample(bch_lab,up_rate).astype('float32')
+        batch_lab *= float(frame_size)/LAB_DIM #make lab as important as wav
         
         if not real_valued:
             batch = __batch_quantize(batch, q_levels, q_type)

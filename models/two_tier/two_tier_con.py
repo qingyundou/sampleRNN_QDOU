@@ -635,9 +635,9 @@ if RESUME:
     lib.load_params(res_path)
     print "Parameters from last available checkpoint loaded."
 
-print('debug: sampling')
-generate_and_save_samples(tag)
-print('debug: ok')
+#print('debug: sampling')
+#generate_and_save_samples(tag)
+#print('debug: ok')
 while True:
     # THIS IS ONE ITERATION
     if total_iters % 500 == 0:
