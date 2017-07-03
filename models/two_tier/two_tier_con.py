@@ -522,7 +522,8 @@ def generate_and_save_samples(tag):
     #samples = numpy.zeros((N_SEQS, LENGTH), dtype='int32')
     #samples[:, :FRAME_SIZE] = Q_ZERO
     
-    testData_feeder = load_data_gen(test_feeder,LENGTH+LAB_SIZE)
+    testData_feeder = load_data_gen(train_feeder,LENGTH+LAB_SIZE)
+    #testData_feeder = load_data_gen(test_feeder,LENGTH+LAB_SIZE)
     mini_batch = testData_feeder.next()
     seqs, _, _, seqs_lab = mini_batch
     samples = seqs[:N_SEQS,FRAME_SIZE:FRAME_SIZE+LENGTH]

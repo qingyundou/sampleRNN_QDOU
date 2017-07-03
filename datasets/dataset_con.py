@@ -13,6 +13,12 @@ import time
 import os
 import glob
 
+import scipy.interpolate
+axisIndex = 1
+LAB_PERIOD = 0.005
+LAB_SIZE = 80
+LAB_DIM = 601
+
 __base = [
     ('Local', 'datasets/'),
     ('Kundan_Local', '/data/lisatmp4/kumarkun/Sounds'),
@@ -61,6 +67,13 @@ def __normalize(data):
     """To range [0., 1.]"""
     data -= data.min(axis=1)[:, None]
     data /= data.max(axis=1)[:, None]
+    return data
+
+def __normalize_lab(data, frame_size):
+    """To range [0., 1.]"""
+    data -= data.min(axis=1)[:, None]
+    data /= (data.max(axis=1)[:, None] + 1e-6)
+    data *= float(frame_size)/LAB_DIM #make lab as important as wav
     return data
 
 def __linear_quantize(data, q_levels):
@@ -143,11 +156,13 @@ def __batch_quantize(data, q_levels, q_type):
         return __mu_law_quantize(data)
     raise NotImplementedError
     
-def __batch_quantize_lab(data, q_levels, q_type):
+def __batch_quantize_lab(data, q_levels, q_type, frame_size):
     """
     One of 'linear', 'a-law', 'mu-law' for q_type.
     """
     data = data.astype('float32')
+    data = __normalize_lab(data, frame_size)
+    
     if q_type == 'linear':
         return __linear_quantize(data, q_levels)
     if q_type == 'a-law':
@@ -182,12 +197,6 @@ def __make_random_batches(inp_list, batch_size):
     __fixed_shuffle(batches)
     return batches
 
-
-import scipy.interpolate
-axisIndex = 1
-LAB_PERIOD = 0.005
-LAB_SIZE = 80
-LAB_DIM = 601
 
 def upsample(input_sequences_lab,up_rate):
     L = input_sequences_lab
@@ -277,11 +286,10 @@ def __speech_feed_epoch(files,
         #for i, data in enumerate(bch_lab):
         #	batch_lab[i, :len(data)] = data
         batch_lab = upsample(bch_lab,up_rate).astype('float32')
-        batch_lab *= float(frame_size)/LAB_DIM #make lab as important as wav
         
         if not real_valued:
             batch = __batch_quantize(batch, q_levels, q_type)
-            batch_lab = __batch_quantize_lab(batch_lab, q_levels, q_type)
+            batch_lab = __batch_quantize_lab(batch_lab, q_levels, q_type, frame_size)
             
             if batch_init == []: batch_init = batch[:,:overlap]
             #if batch_init==[]: batch_init = numpy.full((batch_size, overlap), q_zero, dtype='int32')
