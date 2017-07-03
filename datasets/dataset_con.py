@@ -254,7 +254,7 @@ def __speech_feed_epoch(files,
     
     up_rate = LAB_SIZE/frame_size
     seq_len_lab = seq_len / lab_len * up_rate #also =seq_len / frame_size
-    batch_init = []
+    batch_init = [] #to init with real data
 
     for bch,bch_lab in zip(batches,batches_lab):
         # batch_seq_len = length of longest sequence in the batch, rounded up to
@@ -291,8 +291,8 @@ def __speech_feed_epoch(files,
             batch = __batch_quantize(batch, q_levels, q_type)
             batch_lab = __batch_quantize_lab(batch_lab, q_levels, q_type, frame_size)
             
-            if batch_init == []: batch_init = batch[:,:overlap]
-            #if batch_init==[]: batch_init = numpy.full((batch_size, overlap), q_zero, dtype='int32')
+            #if batch_init == []: batch_init = batch[:,:overlap] #to init with real data
+            if batch_init==[]: batch_init = numpy.full((batch_size, overlap), q_zero, dtype='int32')
             batch = numpy.concatenate([
                 batch_init,
                 batch
@@ -301,8 +301,8 @@ def __speech_feed_epoch(files,
             batch -= __speech_train_mean_std[0]
             batch /= __speech_train_mean_std[1]
             
-            if batch_init == []: batch_init = batch[:,:overlap]
-            #if batch_init==[]: batch_init = numpy.full((batch_size, overlap), 0, dtype='float32')
+            #if batch_init == []: batch_init = batch[:,:overlap] #to init with real data
+            if batch_init==[]: batch_init = numpy.full((batch_size, overlap), 0, dtype='float32')
             batch = numpy.concatenate([
                 batch_init,
                 batch
@@ -313,7 +313,7 @@ def __speech_feed_epoch(files,
             mask
         ], axis=1)
 
-        batch_init = batch[:,-overlap:]
+        #batch_init = batch[:,-overlap:] #to init with real data
         
         for i in xrange(batch_seq_len // seq_len):
             reset = numpy.int32(i==0)
