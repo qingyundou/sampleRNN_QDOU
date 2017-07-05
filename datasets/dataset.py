@@ -21,7 +21,7 @@ __base = [
 __blizz_file = 'Blizzard/Blizzard9k_{}.npy'  # in float16 8secs*16000samples/sec
 __music_file = 'music/music_{}.npy'  # in float16 8secs*16000samples/sec
 __huck_file = 'Huckleberry/Huckleberry_{}.npy'  # in float16 8secs*16000samples/sec
-__speech_file = 'speech/speech_{}.npy'  # in float16 8secs*16000samples/sec
+__speech_file = 'speech/manuAlign_float32_cutEnd/speech_{}.npy'  # in float16 8secs*16000samples/sec
 
 __blizz_train_mean_std = np.array([0.0008558356760380169,
                                    0.098437514304141299],

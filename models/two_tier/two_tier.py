@@ -105,7 +105,7 @@ def get_args():
     parser.add_argument('--which_set', help='ONOM, BLIZZ, or MUSIC, or SPEECH',
             choices=['ONOM', 'BLIZZ', 'MUSIC', 'SPEECH'], required=True)
     parser.add_argument('--batch_size', help='size of mini-batch',
-            type=check_positive, choices=[1, 64, 128, 256], required=True)
+            type=check_positive, choices=[1, 20, 64, 128, 256], required=True)
 
     parser.add_argument('--debug', help='Debug mode', required=False, default=False, action='store_true')
     # NEW
