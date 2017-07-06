@@ -312,7 +312,7 @@ def __speech_feed_epoch(files,
         ], axis=1)
 
         #batch_init = batch[:,-overlap:] #to init with real data
-        batch_lab = batch_lab*0 + q_zero #for debug, set lab to 0
+        #batch_lab = batch_lab*0 + q_zero #for debug, set lab to 0
         
         for i in xrange(batch_seq_len // seq_len):
             reset = numpy.int32(i==0)

@@ -616,6 +616,12 @@ h0 = numpy.zeros((BATCH_SIZE, N_RNN, H0_MULT*DIM), dtype='float32')
 # Initial load train dataset
 tr_feeder = load_data(train_feeder)
 
+### start from uncon
+print('---loading uncon_para_expand.pkl---')
+uncon_para_expand_path = 'uncon_para_expand.pkl'
+lib.load_params(uncon_para_expand_path)
+print('---loading complete---')
+
 ### Handling the resume option:
 if RESUME:
     # Check if checkpoint from previous run is not corrupted.
