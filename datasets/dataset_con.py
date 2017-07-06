@@ -28,7 +28,7 @@ __blizz_file = 'Blizzard/Blizzard9k_{}.npy'  # in float16 8secs*16000samples/sec
 __music_file = 'music/music_{}.npy'  # in float16 8secs*16000samples/sec
 __huck_file = 'Huckleberry/Huckleberry_{}.npy'  # in float16 8secs*16000samples/sec
 __speech_file = 'speech/manuAlign_float32_cutEnd/speech_{}.npy'  # in float16 8secs*16000samples/sec
-__speech_file_lab = 'speech/lab_norm_01/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
+__speech_file_lab = 'speech/lab_norm_01_train/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
 
 __blizz_train_mean_std = np.array([0.0008558356760380169,
                                    0.098437514304141299],
@@ -70,9 +70,9 @@ def __normalize(data):
     return data
 
 def __normalize_lab(data, frame_size):
-    """To range [0., 1.]"""
-    data -= data.min(axis=1)[:, None]
-    data /= (data.max(axis=1)[:, None] + 1e-6)
+    """Already in range [0., 1.]"""
+    #data -= data.min(axis=1)[:, None]
+    #data /= (data.max(axis=1)[:, None] + 1e-6)
     data *= float(frame_size)/LAB_DIM #make lab as important as wav
     return data
 
@@ -283,8 +283,6 @@ def __speech_feed_epoch(files,
             # mask[i, len(data):] = numpy.float32(0)
         
         ##label##
-        #for i, data in enumerate(bch_lab):
-        #	batch_lab[i, :len(data)] = data
         batch_lab = upsample(bch_lab,up_rate).astype('float32')
         
         if not real_valued:
@@ -314,6 +312,7 @@ def __speech_feed_epoch(files,
         ], axis=1)
 
         #batch_init = batch[:,-overlap:] #to init with real data
+        batch_lab = batch_lab*0 + q_zero #for debug, set lab to 0
         
         for i in xrange(batch_seq_len // seq_len):
             reset = numpy.int32(i==0)
