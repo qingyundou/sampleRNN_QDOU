@@ -69,11 +69,13 @@ def __normalize(data):
     data /= data.max(axis=1)[:, None]
     return data
 
+FLAG_DIVLAB = False
 def __normalize_lab(data, frame_size):
     """Already in range [0., 1.]"""
     #data -= data.min(axis=1)[:, None]
     #data /= (data.max(axis=1)[:, None] + 1e-6)
-    data *= float(frame_size)/LAB_DIM #make lab as important as wav
+    if FLAG_DIVLAB:
+        data *= float(frame_size)/LAB_DIM #make lab as important as wav
     return data
 
 def __linear_quantize(data, q_levels):
@@ -249,6 +251,11 @@ def __speech_feed_epoch(files,
     print('---in dataset.py---')
     """
     
+    print('')
+    if FLAG_DIVLAB: print('REMINDER: lab is divided to reduce its importance')
+    else: print('REMINDER: lab is NOT divided to reduce its importance')
+    print('')
+    
     assert seq_len % lab_len == 0,\
     'seq_len should be divisible by lab_len'
     
@@ -322,6 +329,7 @@ def __speech_feed_epoch(files,
             subbatch_lab = batch_lab[:, i*seq_len_lab : (i+1)*seq_len_lab]
             yield (subbatch, reset, submask, subbatch_lab)
 
+FLAG_LESSDATA_DEBUG = False
 def speech_train_feed_epoch(*args):
     """
     :parameters:
@@ -354,7 +362,13 @@ def speech_train_feed_epoch(*args):
     data_path = find_dataset(__train(__speech_file_lab))
     files_lab = numpy.load(data_path)
     generator = __speech_feed_epoch(files, files_lab, *args)
-#    generator = __speech_feed_epoch(files[:40], files_lab[:40], *args)
+    if FLAG_LESSDATA_DEBUG:
+        print('')
+        print('REMINDER: using less training data to debug code')
+        print('')
+        generator = __speech_feed_epoch(files[:40], files_lab[:40], *args)
+    else:
+        generator = __speech_feed_epoch(files, files_lab, *args)
     return generator
 
 def speech_valid_feed_epoch(*args):

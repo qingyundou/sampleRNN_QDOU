@@ -502,6 +502,7 @@ sample_level_generate_fn = theano.function(
 
 from datasets.dataset_con import upsample
 up_rate = LAB_SIZE/FRAME_SIZE
+FLAG_USETRAIN_WHENTEST = False
 def generate_and_save_samples(tag):
     def write_audio_file(name, data):
         data = data.astype('float32')
@@ -522,8 +523,13 @@ def generate_and_save_samples(tag):
     #op1: init with zero
     samples = numpy.zeros((N_SEQS, LENGTH), dtype='int32')
     samples[:, :FRAME_SIZE] = Q_ZERO
-    testData_feeder = load_data_gen(train_feeder,LENGTH)
-    #testData_feeder = load_data_gen(test_feeder,LENGTH)
+    if FLAG_USETRAIN_WHENTEST:
+        print('')
+        print('REMINDER: using training data for test')
+        print('')
+        testData_feeder = load_data_gen(train_feeder,LENGTH)
+    else:
+        testData_feeder = load_data_gen(test_feeder,LENGTH)
     mini_batch = testData_feeder.next()
     _, _, _, seqs_lab = mini_batch
     samples_lab = seqs_lab[:N_SEQS]
