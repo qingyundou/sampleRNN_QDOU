@@ -1,3 +1,8 @@
+bkup_data/
+
+#logging files for parameter / cost
+*.pkl
+
 # data
 *.wav
 *.npy
