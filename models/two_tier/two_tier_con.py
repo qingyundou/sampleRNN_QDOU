@@ -43,7 +43,9 @@ import scipy.io.wavfile
 
 import lib
 
-LEARNING_RATE = 0.001
+LEARNING_RATE = 0.001 #0.001, 0.0001, 0.0005
+
+FLAG_QUANTLAB = False
 
 ### Parsing passed args/hyperparameters ###
 def get_args():
@@ -160,7 +162,7 @@ TRAIN_MODE = 'time' # To use PRINT_TIME and STOP_TIME
 PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every N iterations.
 STOP_ITERS = 100000 # Stop after this many iterations
 # TODO:
-PRINT_TIME = 6*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
+PRINT_TIME = 12*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
 STOP_TIME = 60*60*24*3 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
 N_SEQS = 10  # Number of samples to generate every time monitoring.
 # TODO:
@@ -271,13 +273,26 @@ def frame_level_rnn(input_sequences, input_sequences_lab, h0, reset):
         FRAME_SIZE
     ))
     
-    frames = T.concatenate([frames, input_sequences_lab], axis=2)
-    
-    # Rescale frames from ints in [0, Q_LEVELS) to floats in [-2, 2]
-    # (a reasonable range to pass as inputs to the RNN)
-    frames = (frames.astype('float32') / lib.floatX(Q_LEVELS/2)) - lib.floatX(1)
-    frames *= lib.floatX(2)
-    # (128, 64, 4)
+    if FLAG_QUANTLAB:
+        frames = T.concatenate([frames, input_sequences_lab], axis=2)
+
+        # Rescale frames from ints in [0, Q_LEVELS) to floats in [-2, 2]
+        # (a reasonable range to pass as inputs to the RNN)
+        frames = (frames.astype('float32') / lib.floatX(Q_LEVELS/2)) - lib.floatX(1)
+        frames *= lib.floatX(2)
+        # (128, 64, 4)
+    else:
+        input_sequences_lab *= lib.floatX(2) # 0< data <2
+        input_sequences_lab -= lib.floatX(1) # -1< data <1
+        input_sequences_lab *= lib.floatX(2) # -2< data <2
+        
+        #input_sequences_lab = input_sequences_lab.astype('float32') - 0.5*lib.floatX(1) # -0.5< data <0.5
+        #input_sequences_lab *= 2*lib.floatX(2) # -2< data <2
+        
+        frames = (frames.astype('float32') / lib.floatX(Q_LEVELS/2)) - lib.floatX(1)
+        frames *= lib.floatX(2)
+        
+        frames = T.concatenate([frames, input_sequences_lab], axis=2)
 
     # Initial state of RNNs
     learned_h0 = lib.param(
@@ -401,8 +416,11 @@ sequences = T.imatrix('sequences')
 h0        = T.tensor3('h0')
 reset     = T.iscalar('reset')
 mask      = T.matrix('mask')
-#sequences_lab      = T.tensor3('sequences_lab')
-sequences_lab      = T.itensor3('sequences_lab')
+if FLAG_QUANTLAB:
+    print('REMINDER: lab is quantized')
+    sequences_lab      = T.itensor3('sequences_lab')
+else:
+    sequences_lab      = T.tensor3('sequences_lab')
 
 if args.debug:
     # Solely for debugging purposes.

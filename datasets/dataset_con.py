@@ -19,6 +19,10 @@ LAB_PERIOD = 0.005
 LAB_SIZE = 80
 LAB_DIM = 601
 
+FLAG_DIVLAB = False
+FLAG_QUANTLAB = False
+FLAG_LESSDATA_DEBUG = False
+
 __base = [
     ('Local', 'datasets/'),
     ('Kundan_Local', '/data/lisatmp4/kumarkun/Sounds'),
@@ -69,7 +73,7 @@ def __normalize(data):
     data /= data.max(axis=1)[:, None]
     return data
 
-FLAG_DIVLAB = False
+
 def __normalize_lab(data, frame_size):
     """Already in range [0., 1.]"""
     #data -= data.min(axis=1)[:, None]
@@ -253,7 +257,8 @@ def __speech_feed_epoch(files,
     
     print('')
     if FLAG_DIVLAB: print('REMINDER: lab is divided to reduce its importance')
-    else: print('REMINDER: lab is NOT divided to reduce its importance')
+    if FLAG_QUANTLAB: print('REMINDER: lab is quantized')
+    else: print('REMINDER: lab is NOT not quantized')
     print('')
     
     assert seq_len % lab_len == 0,\
@@ -294,7 +299,8 @@ def __speech_feed_epoch(files,
         
         if not real_valued:
             batch = __batch_quantize(batch, q_levels, q_type)
-            batch_lab = __batch_quantize_lab(batch_lab, q_levels, q_type, frame_size)
+            if FLAG_QUANTLAB:
+                batch_lab = __batch_quantize_lab(batch_lab, q_levels, q_type, frame_size)
             
             #if batch_init == []: batch_init = batch[:,:overlap] #to init with real data
             if batch_init==[]: batch_init = numpy.full((batch_size, overlap), q_zero, dtype='int32')
@@ -329,7 +335,7 @@ def __speech_feed_epoch(files,
             subbatch_lab = batch_lab[:, i*seq_len_lab : (i+1)*seq_len_lab]
             yield (subbatch, reset, submask, subbatch_lab)
 
-FLAG_LESSDATA_DEBUG = False
+
 def speech_train_feed_epoch(*args):
     """
     :parameters:
