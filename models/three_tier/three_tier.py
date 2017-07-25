@@ -45,6 +45,8 @@ import scipy.io.wavfile
 
 import lib
 
+import pdb
+
 LEARNING_RATE = 0.001
 
 ### Parsing passed args/hyperparameters ###
@@ -114,12 +116,15 @@ def get_args():
     parser.add_argument('--which_set', help='ONOM, BLIZZ, MUSIC, or HUCK, or SPEECH',
             choices=['ONOM', 'BLIZZ', 'MUSIC', 'HUCK', 'SPEECH'], required=True)
     parser.add_argument('--batch_size', help='size of mini-batch',
-            type=check_positive, choices=[1, 64, 128, 256], required=True)
+            type=check_positive, choices=[1, 20, 64, 128, 256], required=True)
 
     parser.add_argument('--debug', help='Debug mode', required=False, default=False, action='store_true')
     parser.add_argument('--resume', help='Resume the same model from the last\
             checkpoint. Order of params are important. [for now]',\
             required=False, default=False, action='store_true')
+    
+    parser.add_argument('--n_big_rnn', help='For tier3, Number of layers in the stacked RNN',\
+            type=check_positive, choices=xrange(1,6), required=False, default=0)
 
     args = parser.parse_args()
 
@@ -148,7 +153,13 @@ SKIP_CONN = args.skip_conn
 DIM = args.dim # Model dimensionality.
 BIG_DIM = DIM # Dimensionality for the slowest level.
 N_RNN = args.n_rnn # How many RNNs to stack in the frame-level model
-N_BIG_RNN = N_RNN # how many RNNs to stack in the big-frame-level model
+
+if args.n_big_rnn==0:
+    N_BIG_RNN = N_RNN # how many RNNs to stack in the big-frame-level model
+else:
+    N_BIG_RNN = args.n_big_rnn
+#pdb.set_trace()
+
 RNN_TYPE = args.rnn_type
 H0_MULT = 2 if RNN_TYPE == 'LSTM' else 1
 LEARN_H0 = args.learn_h0
@@ -181,9 +192,9 @@ TRAIN_MODE = 'time' # To use PRINT_TIME and STOP_TIME
 # and (STOP_ITERS, STOP_TIME), whichever happened first, for stopping exp.
 PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every N iterations.
 STOP_ITERS = 100000 # Stop after this many iterations
-PRINT_TIME = 6*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
+PRINT_TIME = 12*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
 STOP_TIME = 60*60*24*3 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
-N_SEQS = 20  # Number of samples to generate every time monitoring.
+N_SEQS = 10  # Number of samples to generate every time monitoring.
 RESULTS_DIR = 'results_3t'
 FOLDER_PREFIX = os.path.join(RESULTS_DIR, tag)
 Q_ZERO = numpy.int32(Q_LEVELS//2) # Discrete value correponding to zero amplitude
@@ -567,6 +578,10 @@ other_grads = [T.clip(g, lib.floatX(-GRAD_CLIP), lib.floatX(GRAD_CLIP)) for g in
 grads = T.grad(cost, wrt=all_params, disconnected_inputs='warn')
 grads = [T.clip(g, lib.floatX(-GRAD_CLIP), lib.floatX(GRAD_CLIP)) for g in grads]
 
+#---debug---
+#pdb.set_trace()
+#---debug---
+
 ip_updates = lasagne.updates.adam(ip_grads, ip_params)
 other_updates = lasagne.updates.adam(other_grads, other_params)
 updates = lasagne.updates.adam(grads, all_params)
@@ -648,7 +663,7 @@ fixed_rand_h0 = numpy.random.rand(N_SEQS//2, N_RNN, H0_MULT*DIM)
 fixed_rand_h0 -= 0.5
 fixed_rand_h0 = fixed_rand_h0.astype('float32')
 
-fixed_rand_big_h0 = numpy.random.rand(N_SEQS//2, N_RNN, H0_MULT*DIM)
+fixed_rand_big_h0 = numpy.random.rand(N_SEQS//2, N_BIG_RNN, H0_MULT*DIM)
 fixed_rand_big_h0 -= 0.5
 fixed_rand_big_h0 = fixed_rand_big_h0.astype('float32')
 
@@ -677,6 +692,7 @@ def generate_and_save_samples(tag):
             (N_SEQS-fixed_rand_big_h0.shape[0], N_BIG_RNN, H0_MULT*BIG_DIM),
             dtype='float32'
     )
+    
     big_h0 = numpy.concatenate((big_h0, fixed_rand_big_h0), axis=0)
     h0 = numpy.zeros(
             (N_SEQS-fixed_rand_h0.shape[0], N_RNN, H0_MULT*DIM),
@@ -789,6 +805,12 @@ if RESUME:
 
     lib.load_params(res_path)
     print "Parameters from last available checkpoint loaded."
+
+FLAG_DEBUG_SAMPLE = False
+if FLAG_DEBUG_SAMPLE:
+    print('debug: sampling')
+    generate_and_save_samples(tag)
+    print('debug: ok')
 
 while True:
     # THIS IS ONE ITERATION
