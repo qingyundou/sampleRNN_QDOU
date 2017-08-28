@@ -43,9 +43,9 @@ import scipy.io.wavfile
 
 import lib
 
-LEARNING_RATE = 0.001 #0.001, 0.0001, 0.0005
+import pdb
 
-FLAG_QUANTLAB = True
+LEARNING_RATE = 0.001 #0.001, 0.0001, 0.0005
 
 ### Parsing passed args/hyperparameters ###
 def get_args():
@@ -273,26 +273,13 @@ def frame_level_rnn(input_sequences, input_sequences_lab, h0, reset):
         FRAME_SIZE
     ))
     
-    if FLAG_QUANTLAB:
-        frames = T.concatenate([frames, input_sequences_lab], axis=2)
-
-        # Rescale frames from ints in [0, Q_LEVELS) to floats in [-2, 2]
-        # (a reasonable range to pass as inputs to the RNN)
-        frames = (frames.astype('float32') / lib.floatX(Q_LEVELS/2)) - lib.floatX(1)
-        frames *= lib.floatX(2)
-        # (128, 64, 4)
-    else:
-        input_sequences_lab *= lib.floatX(2) # 0< data <2
-        input_sequences_lab -= lib.floatX(1) # -1< data <1
-        input_sequences_lab *= lib.floatX(2) # -2< data <2
-        
-        #input_sequences_lab = input_sequences_lab.astype('float32') - 0.5*lib.floatX(1) # -0.5< data <0.5
-        #input_sequences_lab *= 2*lib.floatX(2) # -2< data <2
-        
-        frames = (frames.astype('float32') / lib.floatX(Q_LEVELS/2)) - lib.floatX(1)
-        frames *= lib.floatX(2)
-        
-        frames = T.concatenate([frames, input_sequences_lab], axis=2)
+    frames = T.concatenate([frames, input_sequences_lab], axis=2)
+    
+    # Rescale frames from ints in [0, Q_LEVELS) to floats in [-2, 2]
+    # (a reasonable range to pass as inputs to the RNN)
+    frames = (frames.astype('float32') / lib.floatX(Q_LEVELS/2)) - lib.floatX(1)
+    frames *= lib.floatX(2)
+    # (128, 64, 4)
 
     # Initial state of RNNs
     learned_h0 = lib.param(
@@ -416,11 +403,8 @@ sequences = T.imatrix('sequences')
 h0        = T.tensor3('h0')
 reset     = T.iscalar('reset')
 mask      = T.matrix('mask')
-if FLAG_QUANTLAB:
-    print('REMINDER: lab is quantized')
-    sequences_lab      = T.itensor3('sequences_lab')
-else:
-    sequences_lab      = T.tensor3('sequences_lab')
+#sequences_lab      = T.tensor3('sequences_lab')
+sequences_lab      = T.itensor3('sequences_lab')
 
 if args.debug:
     # Solely for debugging purposes.
@@ -472,7 +456,12 @@ cost = cost * lib.floatX(numpy.log2(numpy.e))
 
 ### Getting the params, grads, updates, and Theano functions ###
 params = lib.get_params(cost, lambda x: hasattr(x, 'param') and x.param==True)
+
+params = [para for para in params if para.name=='FrameLevel.GRU1.Step.Input.W0'] #lock weights
+
 lib.print_params_info(params, path=FOLDER_PREFIX)
+
+#pdb.set_trace() #lock weights
 
 grads = T.grad(cost, wrt=params, disconnected_inputs='warn')
 grads = [T.clip(g, lib.floatX(-GRAD_CLIP), lib.floatX(GRAD_CLIP)) for g in grads]
@@ -641,21 +630,11 @@ h0 = numpy.zeros((BATCH_SIZE, N_RNN, H0_MULT*DIM), dtype='float32')
 tr_feeder = load_data(train_feeder)
 
 ### start from uncon
-FLAG_UCINIT = False
-if FLAG_UCINIT:
-    print('---loading uncon_para_expand.pkl---')
-    uncon_para_expand_path = 'uncon_para_expand.pkl'
-    lib.load_params(uncon_para_expand_path)
-    print('---loading complete---')
+print('---loading uncon_para_expand.pkl---')
+uncon_para_expand_path = 'uncon_para_expand.pkl'
+lib.load_params(uncon_para_expand_path)
+print('---loading complete---')
 
-FLAG_UCINIT_LONG = True
-if FLAG_UCINIT_LONG:
-    print('---loading uncon_para_expand_long.pkl---')
-    uncon_para_expand_path = 'uncon_para_expand_long.pkl'
-    lib.load_params(uncon_para_expand_path)
-    print('---loading complete---')
-
-    
 ### Handling the resume option:
 if RESUME:
     # Check if checkpoint from previous run is not corrupted.
@@ -715,7 +694,7 @@ while True:
     #print "This cost:", cost, "This h0.mean()", h0.mean()
 
     costs.append(cost)
-
+    
     # Monitoring step
     if (TRAIN_MODE=='iters' and total_iters-last_print_iters == PRINT_ITERS) or \
         (TRAIN_MODE=='time' and total_time-last_print_time >= PRINT_TIME) or \

@@ -20,7 +20,7 @@ LAB_SIZE = 80
 LAB_DIM = 601
 
 FLAG_DIVLAB = False
-FLAG_QUANTLAB = False
+FLAG_QUANTLAB = True
 FLAG_LESSDATA_DEBUG = False
 
 __base = [
