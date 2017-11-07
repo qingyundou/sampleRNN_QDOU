@@ -1,4 +1,22 @@
+#directories
 bkup_data/
+bkup/
+scripts/autolog
+
+results_2t/
+results_3t/
+results_smallExp/
+
+#grid job log file
+*.sh.*
+scripts/*.txt
+
+#ipython notebook - should manuelly add important ones
+*.ipynb
+
+#above added by QDOU
+#---------------------------------
+
 
 #logging files for parameter / cost
 *.pkl
