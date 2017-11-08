@@ -23,6 +23,9 @@ FLAG_DIVLAB = False
 FLAG_QUANTLAB = True
 FLAG_LESSDATA_DEBUG = False
 
+FLAG_RMZERO = False
+FLAG_NORMED_ALRDY = False
+
 __base = [
     ('Local', 'datasets/'),
     ('Kundan_Local', '/data/lisatmp4/kumarkun/Sounds'),
@@ -31,7 +34,11 @@ __base = [
 __blizz_file = 'Blizzard/Blizzard9k_{}.npy'  # in float16 8secs*16000samples/sec
 __music_file = 'music/music_{}.npy'  # in float16 8secs*16000samples/sec
 __huck_file = 'Huckleberry/Huckleberry_{}.npy'  # in float16 8secs*16000samples/sec
-__speech_file = 'speech/manuAlign_float32_cutEnd/speech_{}.npy'  # in float16 8secs*16000samples/sec
+
+if FLAG_NORMED_ALRDY:
+    __speech_file = 'speech/manuAlign_float32_cutEnd_norm/speech_{}.npy'  # in float16 8secs*16000samples/sec
+else:
+    __speech_file = 'speech/manuAlign_float32_cutEnd/speech_{}.npy'  # in float16 8secs*16000samples/sec
 __speech_file_lab = 'speech/lab_norm_01_train/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
 
 __blizz_train_mean_std = np.array([0.0008558356760380169,
@@ -150,7 +157,8 @@ def __batch_quantize(data, q_levels, q_type):
     One of 'linear', 'a-law', 'mu-law' for q_type.
     """
     data = data.astype('float32')
-    data = __normalize(data)
+    if not FLAG_NORMED_ALRDY:
+        data = __normalize(data)
     if q_type == 'linear':
         return __linear_quantize(data, q_levels)
     if q_type == 'a-law':
@@ -219,7 +227,11 @@ def upsample(input_sequences_lab,up_rate):
     frames_lab = f_upsample(time_lab_up)
     return frames_lab
 
-
+def get_files_init(batch,overlap):
+    tmp = batch[:-1,-overlap:]
+    row1 = numpy.full((1, overlap), 0, dtype='float32')
+    tmp = numpy.concatenate((row1,tmp),axis=0)
+    return tmp
 ### SPEECH DATASET LOADER ###
 def __speech_feed_epoch(files,
                         files_lab,
@@ -247,26 +259,31 @@ def __speech_feed_epoch(files,
     subbatch.shape: (BATCH_SIZE, SEQ_LEN + OVERLAP)
     reset: True or False
     """
-    batches = __make_random_batches(files, batch_size)
-    batches_lab = __make_random_batches(files_lab, batch_size)
-    """
-    print('---in dataset.py---')
-    print(len(batches))
-    print('---in dataset.py---')
-    """
-    
     print('')
+    if FLAG_RMZERO: print('REMINDER: starting from real data')
+    else: print('REMINDER: starting from q_zeros')
+    if FLAG_NORMED_ALRDY: print('REMINDER: normalize on corpus level')
+    else: print('REMINDER: normalize on sentence level')
+        
     if FLAG_DIVLAB: print('REMINDER: lab is divided to reduce its importance')
     if FLAG_QUANTLAB: print('REMINDER: lab is quantized')
     else: print('REMINDER: lab is NOT not quantized')
     print('')
     
+    if FLAG_RMZERO:
+        ##build files_init to init with real data##
+        files_init = get_files_init(files,overlap)
+        files = numpy.concatenate((files_init,files),axis=1)
+    
+    batches = __make_random_batches(files, batch_size)
+    batches_lab = __make_random_batches(files_lab, batch_size)
+    
+
     assert seq_len % lab_len == 0,\
     'seq_len should be divisible by lab_len'
     
     up_rate = LAB_SIZE/frame_size
     seq_len_lab = seq_len / lab_len * up_rate #also =seq_len / frame_size
-    batch_init = [] #to init with real data
 
     for bch,bch_lab in zip(batches,batches_lab):
         # batch_seq_len = length of longest sequence in the batch, rounded up to
@@ -302,29 +319,26 @@ def __speech_feed_epoch(files,
             if FLAG_QUANTLAB:
                 batch_lab = __batch_quantize_lab(batch_lab, q_levels, q_type, frame_size)
             
-            #if batch_init == []: batch_init = batch[:,:overlap] #to init with real data
-            if batch_init==[]: batch_init = numpy.full((batch_size, overlap), q_zero, dtype='int32')
-            batch = numpy.concatenate([
-                batch_init,
-                batch
-            ], axis=1)
+            if not FLAG_RMZERO:
+                batch = numpy.concatenate([
+                    numpy.full((batch_size, overlap), q_zero, dtype='int32'),
+                    batch
+                ], axis=1)
         else:
             batch -= __speech_train_mean_std[0]
             batch /= __speech_train_mean_std[1]
             
-            #if batch_init == []: batch_init = batch[:,:overlap] #to init with real data
-            if batch_init==[]: batch_init = numpy.full((batch_size, overlap), 0, dtype='float32')
-            batch = numpy.concatenate([
-                batch_init,
-                batch
-            ], axis=1).astype('float32')
+            if not FLAG_RMZERO:
+                batch = numpy.concatenate([
+                    numpy.full((batch_size, overlap), 0, dtype='float32'),
+                    batch
+                ], axis=1).astype('float32')
 
         mask = numpy.concatenate([
             numpy.full((batch_size, overlap), 1, dtype='float32'),
             mask
         ], axis=1)
 
-        #batch_init = batch[:,-overlap:] #to init with real data
         #batch_lab = batch_lab*0 + q_zero #for debug, set lab to 0
         
         for i in xrange(batch_seq_len // seq_len):
