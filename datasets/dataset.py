@@ -15,11 +15,13 @@ import glob
 FLAG_RMZERO = False
 FLAG_NORMED_ALRDY = False
 
-__base = [
-    ('Local', 'datasets/'),
-    ('Kundan_Local', '/data/lisatmp4/kumarkun/Sounds'),
-    ('Soroush_Local', '/Tmp/mehris'),  # put at the end
-]
+FLAG_GRID = True
+if FLAG_GRID:
+    __base = [('Grid', '/scratch/qd212/datasets/')]
+else:
+    __base = [('Local', 'datasets/')]
+    
+    
 __blizz_file = 'Blizzard/Blizzard9k_{}.npy'  # in float16 8secs*16000samples/sec
 __music_file = 'music/music_{}.npy'  # in float16 8secs*16000samples/sec
 __huck_file = 'Huckleberry/Huckleberry_{}.npy'  # in float16 8secs*16000samples/sec
@@ -200,6 +202,8 @@ def __speech_feed_epoch(files,
     else: print('REMINDER: starting from q_zeros')
     if FLAG_NORMED_ALRDY: print('REMINDER: normalize on corpus level')
     else: print('REMINDER: normalize on sentence level')
+    if FLAG_GRID: print('REMINDER: using data on air')
+    else: print('REMINDER: using local data')
     print('')
     
     if FLAG_RMZERO:
