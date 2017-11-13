@@ -19,14 +19,16 @@ LAB_PERIOD = 0.005
 LAB_SIZE = 80
 LAB_DIM = 601
 
+
+from __main__ import flag_dict
 FLAG_DIVLAB = False
-FLAG_QUANTLAB = True
 FLAG_LESSDATA_DEBUG = False
+FLAG_QUANTLAB = flag_dict['QUANTLAB']
 
-FLAG_RMZERO = False
-FLAG_NORMED_ALRDY = False
+FLAG_RMZERO = flag_dict['RMZERO']
+FLAG_NORMED_ALRDY = flag_dict['NORMED_ALRDY']
 
-FLAG_GRID = True
+FLAG_GRID = flag_dict['GRID']
 if FLAG_GRID:
     __base = [('Grid', '/scratch/qd212/datasets/')]
 else:

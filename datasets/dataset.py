@@ -12,10 +12,11 @@ import time
 import os
 import glob
 
-FLAG_RMZERO = False
-FLAG_NORMED_ALRDY = False
+from __main__ import flag_dict
+FLAG_RMZERO = flag_dict['RMZERO']
+FLAG_NORMED_ALRDY = flag_dict['NORMED_ALRDY']
 
-FLAG_GRID = True
+FLAG_GRID = flag_dict['GRID']
 if FLAG_GRID:
     __base = [('Grid', '/scratch/qd212/datasets/')]
 else:

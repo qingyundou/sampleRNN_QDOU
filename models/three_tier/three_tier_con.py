@@ -49,7 +49,7 @@ import pdb
 
 LEARNING_RATE = 0.001
 
-FLAG_QUANTLAB = True
+
 
 ### Parsing passed args/hyperparameters ###
 def get_args():
@@ -127,6 +127,16 @@ def get_args():
     
     parser.add_argument('--n_big_rnn', help='For tier3, Number of layers in the stacked RNN',\
             type=check_positive, choices=xrange(1,6), required=False, default=0)
+    
+    parser.add_argument('--rmzero', help='remove q_zero, start from real data',\
+            required=False, default=False, action='store_true')
+    parser.add_argument('--normed', help='normalize data on corpus level',\
+            required=False, default=False, action='store_true')
+    parser.add_argument('--grid', help='use data on air',\
+            required=False, default=False, action='store_true')
+    
+    parser.add_argument('--quantlab', help='quantize labels',\
+            required=False, default=False, action='store_true')
 
     args = parser.parse_args()
 
@@ -136,6 +146,13 @@ def get_args():
     tag += '-lr'+str(LEARNING_RATE)
     print "Created experiment tag for these args:"
     print tag
+    
+    #deal with pb - dir name too long
+    tag = reduce(lambda a, b: a+b, sys.argv[:-4]).replace('--resume', '').replace('/', '-').replace('--', '-').replace('True', 'T').replace('False', 'F')
+    tag += '-lr'+str(LEARNING_RATE)
+    
+    #maxTag = 200
+    #if len(tag)>maxTag: tag = tag[:maxTag]
 
     return args, tag
 
@@ -178,6 +195,18 @@ N_FRAMES = SEQ_LEN / FRAME_SIZE # Number of frames in each truncated BPTT pass
 
 if Q_TYPE == 'mu-law' and Q_LEVELS != 256:
     raise ValueError('For mu-law Quantization levels should be exactly 256!')
+
+    
+    
+    
+###set FLAGS for options
+flag_dict = {}
+flag_dict['RMZERO'] = args.rmzero
+flag_dict['NORMED_ALRDY'] = args.normed
+flag_dict['GRID'] = args.grid
+flag_dict['QUANTLAB'] = args.quantlab
+
+FLAG_QUANTLAB = flag_dict['QUANTLAB']
 
 # Fixed hyperparams
 GRAD_CLIP = 1 # Elementwise grad clip threshold
@@ -240,6 +269,7 @@ if not os.path.exists(BEST_PATH):
     os.makedirs(BEST_PATH)
 
 lib.print_model_settings(locals(), path=FOLDER_PREFIX, sys_arg=True)
+
 
 ### Import the data_feeder ###
 # Handling WHICH_SET
@@ -865,7 +895,7 @@ tr_feeder = load_data(train_feeder)
 
 ### start from uncon
 FLAG_UCINIT = True
-if FLAG_UCINIT:
+if (FLAG_UCINIT and not RESUME):
     print('---loading uncon_para_expand_3t.pkl---')
     uncon_para_expand_path = 'uncon_para_expand_3t.pkl'
     lib.load_params(uncon_para_expand_path)

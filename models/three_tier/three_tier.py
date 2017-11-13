@@ -125,6 +125,13 @@ def get_args():
     
     parser.add_argument('--n_big_rnn', help='For tier3, Number of layers in the stacked RNN',\
             type=check_positive, choices=xrange(1,6), required=False, default=0)
+    
+    parser.add_argument('--rmzero', help='remove q_zero, start from real data',\
+            required=False, default=False, action='store_true')
+    parser.add_argument('--normed', help='normalize data on corpus level',\
+            required=False, default=False, action='store_true')
+    parser.add_argument('--grid', help='use data on air',\
+            required=False, default=False, action='store_true')
 
     args = parser.parse_args()
 
@@ -176,6 +183,14 @@ N_FRAMES = SEQ_LEN / FRAME_SIZE # Number of frames in each truncated BPTT pass
 
 if Q_TYPE == 'mu-law' and Q_LEVELS != 256:
     raise ValueError('For mu-law Quantization levels should be exactly 256!')
+    
+
+###set FLAGS for options
+flag_dict = {}
+flag_dict['RMZERO'] = args.rmzero
+flag_dict['NORMED_ALRDY'] = args.normed
+flag_dict['GRID'] = args.grid
+
 
 # Fixed hyperparams
 GRAD_CLIP = 1 # Elementwise grad clip threshold
