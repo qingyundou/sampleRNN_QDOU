@@ -779,7 +779,7 @@ def generate_and_save_samples(tag):
     LENGTH = N_SECS*BITRATE if not args.debug else 100
 
     samples = numpy.zeros((N_SEQS, LENGTH), dtype='int32')
-    samples[:, :BIG_FRAME_SIZE] = Q_ZERO
+
     if FLAG_USETRAIN_WHENTEST:
         print('')
         print('REMINDER: using training data for test')
@@ -788,8 +788,13 @@ def generate_and_save_samples(tag):
     else:
         testData_feeder = load_data_gen(test_feeder,LENGTH)
     mini_batch = testData_feeder.next()
-    _, _, _, seqs_lab = mini_batch
+    tmp, _, _, seqs_lab = mini_batch
     samples_lab = seqs_lab[:N_SEQS]
+    
+    if flag_dict['RMZERO']:
+        samples[:, :BIG_FRAME_SIZE] = tmp[:N_SEQS, :BIG_FRAME_SIZE]
+    else:
+        samples[:, :BIG_FRAME_SIZE] = Q_ZERO
     
     samples_lab_big = get_lab_big(samples_lab)
     

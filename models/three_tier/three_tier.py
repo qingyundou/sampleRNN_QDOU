@@ -700,7 +700,13 @@ def generate_and_save_samples(tag):
     LENGTH = N_SECS*BITRATE if not args.debug else 100
 
     samples = numpy.zeros((N_SEQS, LENGTH), dtype='int32')
-    samples[:, :BIG_FRAME_SIZE] = Q_ZERO
+    if flag_dict['RMZERO']:
+        testData_feeder = load_data(test_feeder)
+        mini_batch = testData_feeder.next()
+        tmp, _, _ = mini_batch
+        samples[:, :BIG_FRAME_SIZE] = tmp[:N_SEQS, :BIG_FRAME_SIZE]
+    else:
+        samples[:, :BIG_FRAME_SIZE] = Q_ZERO
 
     # First half zero, others fixed random at each checkpoint
     big_h0 = numpy.zeros(
