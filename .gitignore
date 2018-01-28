@@ -1,10 +1,15 @@
 #directories
 bkup_data/
 bkup/
+scripts/asup
 scripts/autolog
+scripts/run_past
+
+
 
 results_2t/
 results_3t/
+results_3t_gen/
 results_smallExp/
 
 #grid job log file
