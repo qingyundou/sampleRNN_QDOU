@@ -45,9 +45,11 @@ import scipy.io.wavfile
 
 import lib
 
-#import pdb
+import pdb
 
 LEARNING_RATE = 0.001
+
+
 
 ### Parsing passed args/hyperparameters ###
 def get_args():
@@ -132,6 +134,13 @@ def get_args():
             required=False, default=False, action='store_true')
     parser.add_argument('--grid', help='use data on air',\
             required=False, default=False, action='store_true')
+    
+    parser.add_argument('--quantlab', help='quantize labels',\
+            required=False, default=False, action='store_true')
+    
+    parser.add_argument('--ep', help='which epoch to generate',\
+            type=str,required=False, default=20)
+    
 
     args = parser.parse_args()
 
@@ -142,12 +151,16 @@ def get_args():
     print "Created experiment tag for these args:"
     print tag
     
-    
     #deal with pb - dir name too long
+    #option1
+    #tag = reduce(lambda a, b: a+b, sys.argv[:-4]).replace('--resume', '').replace('/', '-').replace('--', '-').replace('True', 'T').replace('False', 'F')
     #option2
     tag = tag.replace('-which_setSPEECH','').replace('size','sz').replace('frame','fr').replace('batch','bch').replace('--grid', '')
+    
     #tag += '-lr'+str(LEARNING_RATE)
     
+    #maxTag = 200
+    #if len(tag)>maxTag: tag = tag[:maxTag]
 
     return args, tag
 
@@ -190,14 +203,20 @@ N_FRAMES = SEQ_LEN / FRAME_SIZE # Number of frames in each truncated BPTT pass
 
 if Q_TYPE == 'mu-law' and Q_LEVELS != 256:
     raise ValueError('For mu-law Quantization levels should be exactly 256!')
-    
 
+    
+#epoch index of the parameter for synthesis
+EXP_NAME = args.exp
+EP_IDX = 'e'+args.ep
+    
 ###set FLAGS for options
 flag_dict = {}
 flag_dict['RMZERO'] = args.rmzero
 flag_dict['NORMED_ALRDY'] = args.normed
 flag_dict['GRID'] = args.grid
+flag_dict['QUANTLAB'] = args.quantlab
 
+FLAG_QUANTLAB = flag_dict['QUANTLAB']
 
 # Fixed hyperparams
 GRAD_CLIP = 1 # Elementwise grad clip threshold
@@ -217,9 +236,14 @@ STOP_ITERS = 100000 # Stop after this many iterations
 PRINT_TIME = 12*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
 STOP_TIME = 60*60*24*3 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
 N_SEQS = 10  # Number of samples to generate every time monitoring.
-RESULTS_DIR = 'results_3t'
+RESULTS_DIR = 'results_3t_gen'
 FOLDER_PREFIX = os.path.join(RESULTS_DIR, tag)
 Q_ZERO = numpy.int32(Q_LEVELS//2) # Discrete value correponding to zero amplitude
+
+LAB_SIZE = 80 #one label covers 80 points on waveform
+LAB_PERIOD = float(0.005) #one label covers 0.005s ~ 200Hz
+LAB_DIM = 601
+UP_RATE = LAB_SIZE/FRAME_SIZE
 
 epoch_str = 'epoch'
 iter_str = 'iter'
@@ -256,6 +280,7 @@ if not os.path.exists(BEST_PATH):
 
 lib.print_model_settings(locals(), path=FOLDER_PREFIX, sys_arg=True)
 
+
 ### Import the data_feeder ###
 # Handling WHICH_SET
 if WHICH_SET == 'ONOM':
@@ -275,24 +300,39 @@ elif WHICH_SET == 'HUCK':
     from datasets.dataset import huck_valid_feed_epoch as valid_feeder
     from datasets.dataset import huck_test_feed_epoch  as test_feeder
 elif WHICH_SET == 'SPEECH':
-    from datasets.dataset import speech_train_feed_epoch as train_feeder
-    from datasets.dataset import speech_valid_feed_epoch as valid_feeder
-    from datasets.dataset import speech_test_feed_epoch  as test_feeder
+    from datasets.dataset_con import speech_train_feed_epoch as train_feeder
+    from datasets.dataset_con import speech_valid_feed_epoch as valid_feeder
+    from datasets.dataset_con import speech_test_feed_epoch  as test_feeder
+
+    
+def get_lab_big(seqs_lab):
+    seqs_lab_big = seqs_lab[:,::BIG_FRAME_SIZE/FRAME_SIZE,:]
+    return seqs_lab_big
+
 
 def load_data(data_feeder):
     """
     Helper function to deal with interface of different datasets.
     `data_feeder` should be `train_feeder`, `valid_feeder`, or `test_feeder`.
     """
-    return data_feeder(BATCH_SIZE,
+    return data_feeder(FRAME_SIZE,
+                       BATCH_SIZE,
                        SEQ_LEN,
                        OVERLAP,
                        Q_LEVELS,
                        Q_ZERO,
                        Q_TYPE)
-
+def load_data_gen(data_feeder,SEQ_LEN_gen):
+    return data_feeder(FRAME_SIZE,
+                       BATCH_SIZE,
+                       SEQ_LEN_gen,
+                       OVERLAP,
+                       Q_LEVELS,
+                       Q_ZERO,
+                       Q_TYPE)
+print('----got to def---')
 ### Creating computation graph ###
-def big_frame_level_rnn(input_sequences, h0, reset):
+def big_frame_level_rnn(input_sequences, input_sequences_lab_big, h0, reset):
     """
     input_sequences.shape: (batch size, n big frames * BIG_FRAME_SIZE)
     h0.shape:              (batch size, N_BIG_RNN, BIG_DIM)
@@ -307,10 +347,20 @@ def big_frame_level_rnn(input_sequences, h0, reset):
         BIG_FRAME_SIZE
     ))
 
-    # Rescale frames from ints in [0, Q_LEVELS) to floats in [-2, 2]
-    # (a reasonable range to pass as inputs to the RNN)
-    frames = (frames.astype('float32') / lib.floatX(Q_LEVELS/2)) - lib.floatX(1)
-    frames *= lib.floatX(2)
+    if FLAG_QUANTLAB:
+        frames = T.concatenate([frames, input_sequences_lab_big], axis=2)
+        # Rescale frames from ints in [0, Q_LEVELS) to floats in [-2, 2]
+        # (a reasonable range to pass as inputs to the RNN)
+        frames = (frames.astype('float32') / lib.floatX(Q_LEVELS/2)) - lib.floatX(1)
+        frames *= lib.floatX(2)
+    else:
+        input_sequences_lab_big *= lib.floatX(2) # 0< data <2
+        input_sequences_lab_big -= lib.floatX(1) # -1< data <1
+        input_sequences_lab_big *= lib.floatX(2) # -2< data <2
+        
+        frames = (frames.astype('float32') / lib.floatX(Q_LEVELS/2)) - lib.floatX(1)
+        frames *= lib.floatX(2)
+        frames = T.concatenate([frames, input_sequences_lab_big], axis=2)
 
     # Initial state of RNNs
     learned_h0 = lib.param(
@@ -325,10 +375,13 @@ def big_frame_level_rnn(input_sequences, h0, reset):
 
     # Handling RNN_TYPE
     # Handling SKIP_CONN
+    #---debug---
+    #pdb.set_trace()
+    #---debug---
     if RNN_TYPE == 'GRU':
         rnns_out, last_hidden = lib.ops.stackedGRU('BigFrameLevel.GRU',
                                                    N_BIG_RNN,
-                                                   BIG_FRAME_SIZE,
+                                                   BIG_FRAME_SIZE+LAB_DIM,
                                                    BIG_DIM,
                                                    frames,
                                                    h0=h0,
@@ -337,7 +390,7 @@ def big_frame_level_rnn(input_sequences, h0, reset):
     elif RNN_TYPE == 'LSTM':
         rnns_out, last_hidden = lib.ops.stackedLSTM('BigFrameLevel.LSTM',
                                                     N_BIG_RNN,
-                                                    BIG_FRAME_SIZE,
+                                                    BIG_FRAME_SIZE+LAB_DIM,
                                                     BIG_DIM,
                                                     frames,
                                                     h0=h0,
@@ -366,7 +419,7 @@ def big_frame_level_rnn(input_sequences, h0, reset):
 
     return (output, last_hidden, independent_preds)
 
-def frame_level_rnn(input_sequences, other_input, h0, reset):
+def frame_level_rnn(input_sequences, input_sequences_lab, other_input, h0, reset):
     """
     input_sequences.shape: (batch size, n frames * FRAME_SIZE)
     other_input.shape:     (batch size, n frames, DIM)
@@ -384,10 +437,28 @@ def frame_level_rnn(input_sequences, other_input, h0, reset):
     # (a reasonable range to pass as inputs to the RNN)
     frames = (frames.astype('float32') / lib.floatX(Q_LEVELS/2)) - lib.floatX(1)
     frames *= lib.floatX(2)
+    
+    if FLAG_QUANTLAB:
+        frames = T.concatenate([frames, input_sequences_lab], axis=2)
+
+        # Rescale frames from ints in [0, Q_LEVELS) to floats in [-2, 2]
+        # (a reasonable range to pass as inputs to the RNN)
+        frames = (frames.astype('float32') / lib.floatX(Q_LEVELS/2)) - lib.floatX(1)
+        frames *= lib.floatX(2)
+        
+    else:
+        input_sequences_lab *= lib.floatX(2) # 0< data <2
+        input_sequences_lab -= lib.floatX(1) # -1< data <1
+        input_sequences_lab *= lib.floatX(2) # -2< data <2
+        
+        frames = (frames.astype('float32') / lib.floatX(Q_LEVELS/2)) - lib.floatX(1)
+        frames *= lib.floatX(2)
+        
+        frames = T.concatenate([frames, input_sequences_lab], axis=2)
 
     gru_input = lib.ops.Linear(
         'FrameLevel.InputExpand',
-        FRAME_SIZE,
+        FRAME_SIZE+LAB_DIM,
         DIM,
         frames,
         initialization='he',
@@ -502,12 +573,21 @@ def sample_level_predictor(frame_level_outputs, prev_samples):
                          weightnorm=WEIGHT_NORM)
     return out
 
+print('----got to T var---')
 sequences   = T.imatrix('sequences')
 h0          = T.tensor3('h0')
 big_h0      = T.tensor3('big_h0')
 reset       = T.iscalar('reset')
 mask        = T.matrix('mask')
-
+if FLAG_QUANTLAB:
+    print('REMINDER: lab is quantized')
+    sequences_lab      = T.itensor3('sequences_lab')
+    sequences_lab_big      = T.itensor3('sequences_lab_big')
+else:
+    print('REMINDER: lab is NOT quantized')
+    sequences_lab      = T.tensor3('sequences_lab')
+    sequences_lab_big      = T.tensor3('sequences_lab_big')
+    
 if args.debug:
     # Solely for debugging purposes.
     # Maybe I should set the compute_test_value=warn from here.
@@ -524,9 +604,12 @@ target_sequences = sequences[:, BIG_FRAME_SIZE:]
 
 target_mask = mask[:, BIG_FRAME_SIZE:]
 
-big_frame_level_outputs, new_big_h0, big_frame_independent_preds = big_frame_level_rnn(big_input_sequences, big_h0, reset)
+#---debug---
+#pdb.set_trace()
+#---debug---
+big_frame_level_outputs, new_big_h0, big_frame_independent_preds = big_frame_level_rnn(big_input_sequences, sequences_lab_big, big_h0, reset)
 
-frame_level_outputs, new_h0 = frame_level_rnn(input_sequences, big_frame_level_outputs, h0, reset)
+frame_level_outputs, new_h0 = frame_level_rnn(input_sequences, sequences_lab, big_frame_level_outputs, h0, reset)
 
 prev_samples = sequences[:, BIG_FRAME_SIZE-FRAME_SIZE:-1]
 prev_samples = prev_samples.reshape((1, BATCH_SIZE, 1, -1))
@@ -608,59 +691,64 @@ ip_updates = lasagne.updates.adam(ip_grads, ip_params)
 other_updates = lasagne.updates.adam(other_grads, other_params)
 updates = lasagne.updates.adam(grads, all_params)
 
+print('----got to fn---')
 # Training function(s)
+"""
 ip_train_fn = theano.function(
-    [sequences, big_h0, reset, mask],
+    #[sequences, sequences_lab, sequences_lab_big, big_h0, reset, mask],
+    [sequences, sequences_lab_big, big_h0, reset, mask],
     [ip_cost, new_big_h0],
     updates=ip_updates,
     on_unused_input='warn'
 )
 
 other_train_fn = theano.function(
-    [sequences, big_h0, h0, reset, mask],
+    [sequences, sequences_lab, sequences_lab_big, big_h0, h0, reset, mask],
     [cost, new_big_h0, new_h0],
     updates=other_updates,
     on_unused_input='warn'
 )
-
+"""
 train_fn = theano.function(
-    [sequences, big_h0, h0, reset, mask],
+    [sequences, sequences_lab, sequences_lab_big, big_h0, h0, reset, mask],
     [cost, new_big_h0, new_h0],
     updates=updates,
     on_unused_input='warn'
 )
 
 # Validation and Test function, hence no updates
+"""
 ip_test_fn = theano.function(
-    [sequences, big_h0, reset, mask],
+    #[sequences, sequences_lab, sequences_lab_big, big_h0, reset, mask],
+    [sequences, sequences_lab_big, big_h0, reset, mask],
     [ip_cost, new_big_h0],
     on_unused_input='warn'
 )
 
 other_test_fn = theano.function(
-    [sequences, big_h0, h0, reset, mask],
+    [sequences, sequences_lab, sequences_lab_big, big_h0, h0, reset, mask],
     [cost, new_big_h0, new_h0],
     on_unused_input='warn'
 )
-
+"""
 test_fn = theano.function(
-    [sequences, big_h0, h0, reset, mask],
+    [sequences, sequences_lab, sequences_lab_big, big_h0, h0, reset, mask],
     [cost, new_big_h0, new_h0],
     on_unused_input='warn'
 )
 
 # Sampling at big frame level
 big_frame_level_generate_fn = theano.function(
-    [sequences, big_h0, reset],
-    big_frame_level_rnn(sequences, big_h0, reset)[0:2],
+    [sequences, sequences_lab_big, big_h0, reset],
+    big_frame_level_rnn(sequences, sequences_lab_big, big_h0, reset)[0:2],
     on_unused_input='warn'
 )
 
 # Sampling at frame level
 big_frame_level_outputs = T.matrix('big_frame_level_outputs')
 frame_level_generate_fn = theano.function(
-    [sequences, big_frame_level_outputs, h0, reset],
-    frame_level_rnn(sequences, big_frame_level_outputs.dimshuffle(0,'x',1), h0, reset),
+    [sequences, sequences_lab, big_frame_level_outputs, h0, reset],
+    frame_level_rnn(sequences, sequences_lab, big_frame_level_outputs.dimshuffle(0,'x',1), h0, reset),
     on_unused_input='warn'
 )
 
@@ -681,21 +769,14 @@ sample_level_generate_fn = theano.function(
 # Uniform [-0.5, 0.5) for half of initial state for generated samples
 # to study the behaviour of the model and also to introduce some diversity
 # to samples in a simple way. [it's disabled]
-fixed_rand_h0 = numpy.random.rand(N_SEQS//2, N_RNN, H0_MULT*DIM)
-fixed_rand_h0 -= 0.5
-fixed_rand_h0 = fixed_rand_h0.astype('float32')
 
-fixed_rand_big_h0 = numpy.random.rand(N_SEQS//2, N_BIG_RNN, H0_MULT*DIM)
-fixed_rand_big_h0 -= 0.5
-fixed_rand_big_h0 = fixed_rand_big_h0.astype('float32')
-
+FLAG_USETRAIN_WHENTEST = False
 def generate_and_save_samples(tag):
     def write_audio_file(name, data):
         data = data.astype('float32')
-        data -= data.min()
-        data /= data.max()
-        data -= 0.5
-        data *= 0.95
+        data -= numpy.mean(data)
+        data /= numpy.absolute(data).max()
+        data /= 2.0
         scipy.io.wavfile.write(
                     os.path.join(SAMPLES_PATH, name+'.wav'),
                     BITRATE,
@@ -703,45 +784,63 @@ def generate_and_save_samples(tag):
 
     total_time = time()
     # Generate N_SEQS' sample files, each 5 seconds long
-    N_SECS = 5
+    N_SECS = 8
     LENGTH = N_SECS*BITRATE if not args.debug else 100
 
     samples = numpy.zeros((N_SEQS, LENGTH), dtype='int32')
+
+    if FLAG_USETRAIN_WHENTEST:
+        print('')
+        print('REMINDER: using training data for test')
+        print('')
+        testData_feeder = load_data_gen(train_feeder,LENGTH)
+    else:
+        testData_feeder = load_data_gen(test_feeder,LENGTH)
+    mini_batch = testData_feeder.next()
+    tmp, _, _, seqs_lab = mini_batch
+    samples_lab = seqs_lab[:N_SEQS]
+    
     if flag_dict['RMZERO']:
-        testData_feeder = load_data(test_feeder)
-        mini_batch = testData_feeder.next()
-        tmp, _, _ = mini_batch
         samples[:, :BIG_FRAME_SIZE] = tmp[:N_SEQS, :BIG_FRAME_SIZE]
     else:
         samples[:, :BIG_FRAME_SIZE] = Q_ZERO
-
+    
+    samples_lab_big = get_lab_big(samples_lab)
+    
     # First half zero, others fixed random at each checkpoint
     big_h0 = numpy.zeros(
-            (N_SEQS-fixed_rand_big_h0.shape[0], N_BIG_RNN, H0_MULT*BIG_DIM),
+            (N_SEQS, N_BIG_RNN, H0_MULT*BIG_DIM),
             dtype='float32'
     )
-    
-    big_h0 = numpy.concatenate((big_h0, fixed_rand_big_h0), axis=0)
+
     h0 = numpy.zeros(
-            (N_SEQS-fixed_rand_h0.shape[0], N_RNN, H0_MULT*DIM),
+            (N_SEQS, N_RNN, H0_MULT*DIM),
             dtype='float32'
     )
-    h0 = numpy.concatenate((h0, fixed_rand_h0), axis=0)
+
     big_frame_level_outputs = None
     frame_level_outputs = None
 
     for t in xrange(BIG_FRAME_SIZE, LENGTH):
 
         if t % BIG_FRAME_SIZE == 0:
+            tmp = samples_lab_big[:,(t-BIG_FRAME_SIZE)//BIG_FRAME_SIZE,:]
+            tmp = tmp.reshape(tmp.shape[0],1,tmp.shape[1])
+            
             big_frame_level_outputs, big_h0 = big_frame_level_generate_fn(
                 samples[:, t-BIG_FRAME_SIZE:t],
+                tmp,
                 big_h0,
                 numpy.int32(t == BIG_FRAME_SIZE)
             )
 
         if t % FRAME_SIZE == 0:
+            tmp = samples_lab[:,(t-FRAME_SIZE)//FRAME_SIZE,:]
+            tmp = tmp.reshape(tmp.shape[0],1,tmp.shape[1])
+            
             frame_level_outputs, h0 = frame_level_generate_fn(
                 samples[:, t-FRAME_SIZE:t],
+                tmp,
                 big_frame_level_outputs[:, (t / FRAME_SIZE) % (BIG_FRAME_SIZE / FRAME_SIZE)],
                 h0,
                 numpy.int32(t == BIG_FRAME_SIZE)
@@ -759,11 +858,9 @@ def generate_and_save_samples(tag):
 
     for i in xrange(N_SEQS):
         samp = samples[i]
-        #pdb.set_trace()
         if Q_TYPE == 'mu-law':
             from datasets.dataset import mu2linear
             samp = mu2linear(samp)
-            #pdb.set_trace()
         elif Q_TYPE == 'a-law':
             raise NotImplementedError('a-law is not implemented')
         write_audio_file("sample_{}_{}".format(tag, i), samp)
@@ -783,8 +880,9 @@ def monitor(data_feeder):
     _big_h0 = numpy.zeros((BATCH_SIZE, N_RNN, H0_MULT*BIG_DIM), dtype='float32')
     _costs = []
     _data_feeder = load_data(data_feeder)
-    for _seqs, _reset, _mask in _data_feeder:
-        _cost, _big_h0, _h0 = test_fn(_seqs, _big_h0, _h0, _reset, _mask)
+    for _seqs, _reset, _mask, _seqs_lab in _data_feeder:
+        _seqs_lab_big = get_lab_big(_seqs_lab)
+        _cost, _big_h0, _h0 = test_fn(_seqs, _seqs_lab, _seqs_lab_big, _big_h0, _h0, _reset, _mask)
         _costs.append(_cost)
 
     return numpy.mean(_costs), time() - _total_time
@@ -806,181 +904,38 @@ epoch = 0
 h0 = numpy.zeros((BATCH_SIZE, N_RNN, H0_MULT*DIM), dtype='float32')
 big_h0 = numpy.zeros((BATCH_SIZE, N_RNN, H0_MULT*BIG_DIM), dtype='float32')
 
-# Initial load train dataset
-tr_feeder = load_data(train_feeder)
+### load para and generate
+#find the para to load
+FLAG_FOUND_EXP = False
+FLAG_FOUND_PARA = False
 
-### Handling the resume option:
-if RESUME:
-    # Check if checkpoint from previous run is not corrupted.
-    # Then overwrite some of the variables above.
-    iters_to_consume, res_path, epoch, total_iters,\
-        [lowest_valid_cost, corresponding_test_cost, test_cost] = \
-        lib.resumable(path=FOLDER_PREFIX,
-                      iter_key=iter_str,
-                      epoch_key=epoch_str,
-                      add_resume_counter=True,
-                      other_keys=[lowest_valid_str,
-                                  corresp_test_str,
-                                  test_nll_str])
-    # At this point we saved the pkl file.
-    last_print_iters = total_iters
-    print "### RESUMING JOB FROM EPOCH {}, ITER {}".format(epoch, total_iters)
-    # Consumes this much iters to get to the last point in training data.
-    consume_time = time()
-    for i in xrange(iters_to_consume):
-        tr_feeder.next()
-    consume_time = time() - consume_time
-    print "Train data ready in {:.2f}secs after consuming {} minibatches.".\
-            format(consume_time, iters_to_consume)
+results_dir = '/home/dawna/tts/qd212/mphilproj/sampleRNN_QDOU/results_3t/'
+for exp_dir in os.listdir(results_dir):
+    if EXP_NAME in exp_dir:
+        FLAG_FOUND_EXP = True
+        break
+        
+if FLAG_FOUND_EXP:
+    para_dir = results_dir+exp_dir+'/params/'
+    for para_name in os.listdir(para_dir):
+        if EP_IDX in para_name:
+            FLAG_FOUND_PARA = True
+            break
 
-    lib.load_params(res_path)
-    print "Parameters from last available checkpoint loaded."
+#load and generate
+if FLAG_FOUND_PARA:
+    print('---found para pkl, loading---')
+    paraPath = para_dir + para_name
+    print paraPath
+    lib.load_params(paraPath)
+    print('---loading complete---')
 
-FLAG_DEBUG_SAMPLE = False
-if FLAG_DEBUG_SAMPLE:
-    print('debug: sampling')
+    tag = '8s_' + EP_IDX
+    print('generating 8 seconds of speech: sampling')
     generate_and_save_samples(tag)
-    print('debug: ok')
+    print('generating 8 seconds of speech: ok')
+    
+else:
+    print('---did not find para pkl, exiting---')
 
-while True:
-    # THIS IS ONE ITERATION
-    if total_iters % 500 == 0:
-        print total_iters,
-
-    total_iters += 1
-
-    try:
-        # Take as many mini-batches as possible from train set
-        mini_batch = tr_feeder.next()
-    except StopIteration:
-        # Mini-batches are finished. Load it again.
-        # Basically, one epoch.
-        tr_feeder = load_data(train_feeder)
-
-        # and start taking new mini-batches again.
-        mini_batch = tr_feeder.next()
-        epoch += 1
-        end_of_batch = True
-        print "[Another epoch]",
-
-    seqs, reset, mask = mini_batch
-
-    start_time = time()
-    cost, big_h0, h0 = train_fn(seqs, big_h0, h0, reset, mask)
-    total_time += time() - start_time
-    #print "This cost:", cost, "This h0.mean()", h0.mean()
-
-    costs.append(cost)
-
-    # Monitoring step
-    if (TRAIN_MODE=='iters' and total_iters-last_print_iters == PRINT_ITERS) or \
-        (TRAIN_MODE=='time' and total_time-last_print_time >= PRINT_TIME) or \
-        (TRAIN_MODE=='time-iters' and total_time-last_print_time >= PRINT_TIME) or \
-        (TRAIN_MODE=='iters-time' and total_iters-last_print_iters >= PRINT_ITERS) or \
-        end_of_batch:
-        # 0. Validation
-        print "\nValidation!",
-        valid_cost, valid_time = monitor(valid_feeder)
-        print "Done!"
-
-        # 1. Test
-        test_time = 0.
-        # Only when the validation cost is improved get the cost for test set.
-        if valid_cost < lowest_valid_cost:
-            lowest_valid_cost = valid_cost
-            print "\n>>> Best validation cost of {} reached. Testing!"\
-                    .format(valid_cost),
-            test_cost, test_time = monitor(test_feeder)
-            print "Done!"
-            # Report last one which is the lowest on validation set:
-            print ">>> test cost:{}\ttotal time:{}".format(test_cost, test_time)
-            corresponding_test_cost = test_cost
-            new_lowest_cost = True
-
-        # 2. Stdout the training progress
-        print_info = "epoch:{}\ttotal iters:{}\twall clock time:{:.2f}h\n"
-        print_info += ">>> Lowest valid cost:{}\t Corresponding test cost:{}\n"
-        print_info += "\ttrain cost:{:.4f}\ttotal time:{:.2f}h\tper iter:{:.3f}s\n"
-        print_info += "\tvalid cost:{:.4f}\ttotal time:{:.2f}h\n"
-        print_info += "\ttest  cost:{:.4f}\ttotal time:{:.2f}h"
-        print_info = print_info.format(epoch,
-                                       total_iters,
-                                       (time()-exp_start)/3600,
-                                       lowest_valid_cost,
-                                       corresponding_test_cost,
-                                       numpy.mean(costs),
-                                       total_time/3600,
-                                       total_time/total_iters,
-                                       valid_cost,
-                                       valid_time/3600,
-                                       test_cost,
-                                       test_time/3600)
-        print print_info
-
-        tag = "e{}_i{}_t{:.2f}_tr{:.4f}_v{:.4f}"
-        tag = tag.format(epoch,
-                         total_iters,
-                         total_time/3600,
-                         numpy.mean(cost),
-                         valid_cost)
-        tag += ("_best" if new_lowest_cost else "")
-
-        # 3. Save params of model (IO bound, time consuming)
-        # If saving params is not successful, there shouldn't be any trace of
-        # successful monitoring step in train_log as well.
-        print "Saving params!",
-        lib.save_params(
-                os.path.join(PARAMS_PATH, 'params_{}.pkl'.format(tag))
-        )
-        print "Done!"
-
-        # 4. Save and graph training progress (fast)
-        training_info = {epoch_str : epoch,
-                         iter_str : total_iters,
-                         train_nll_str : numpy.mean(costs),
-                         valid_nll_str : valid_cost,
-                         test_nll_str : test_cost,
-                         lowest_valid_str : lowest_valid_cost,
-                         corresp_test_str : corresponding_test_cost,
-                         'train time' : total_time,
-                         'valid time' : valid_time,
-                         'test time' : test_time,
-                         'wall clock time' : time()-exp_start}
-        lib.save_training_info(training_info, FOLDER_PREFIX)
-        print "Train info saved!",
-
-        y_axis_strs = [train_nll_str, valid_nll_str, test_nll_str]
-        lib.plot_traing_info(iter_str, y_axis_strs, FOLDER_PREFIX)
-        print "And plotted!"
-
-        # 5. Generate and save samples (time consuming)
-        # If not successful, we still have the params to sample afterward
-        print "Sampling!",
-        # Generate samples
-        generate_and_save_samples(tag)
-        print "Done!"
-
-        if total_iters-last_print_iters == PRINT_ITERS \
-            or total_time-last_print_time >= PRINT_TIME:
-                # If we are here b/c of onom_end_of_batch, we shouldn't mess
-                # with costs and last_print_iters
-            costs = []
-            last_print_time += PRINT_TIME
-            last_print_iters += PRINT_ITERS
-
-        end_of_batch = False
-        new_lowest_cost = False
-
-        print "Validation Done!\nBack to Training..."
-
-    if (TRAIN_MODE=='iters' and total_iters == STOP_ITERS) or \
-       (TRAIN_MODE=='time' and total_time >= STOP_TIME) or \
-       ((TRAIN_MODE=='time-iters' or TRAIN_MODE=='iters-time') and \
-            (total_iters == STOP_ITERS or total_time >= STOP_TIME)):
-
-        print "Done! Total iters:", total_iters, "Total time: ", total_time
-        print "Experiment ended at:", datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M')
-        print "Wall clock time spent: {:.2f}h"\
-                    .format((time()-exp_start)/3600)
-
-        sys.exit()
+sys.exit()

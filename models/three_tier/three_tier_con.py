@@ -148,8 +148,12 @@ def get_args():
     print tag
     
     #deal with pb - dir name too long
-    tag = reduce(lambda a, b: a+b, sys.argv[:-4]).replace('--resume', '').replace('/', '-').replace('--', '-').replace('True', 'T').replace('False', 'F')
-    tag += '-lr'+str(LEARNING_RATE)
+    #option1
+    #tag = reduce(lambda a, b: a+b, sys.argv[:-4]).replace('--resume', '').replace('/', '-').replace('--', '-').replace('True', 'T').replace('False', 'F')
+    #option2
+    tag = tag.replace('-which_setSPEECH','').replace('size','sz').replace('frame','fr').replace('batch','bch').replace('--grid', '')
+    
+    #tag += '-lr'+str(LEARNING_RATE)
     
     #maxTag = 200
     #if len(tag)>maxTag: tag = tag[:maxTag]
