@@ -28,7 +28,8 @@ __music_file = 'music/music_{}.npy'  # in float16 8secs*16000samples/sec
 __huck_file = 'Huckleberry/Huckleberry_{}.npy'  # in float16 8secs*16000samples/sec
 
 if FLAG_NORMED_ALRDY:
-    __speech_file = 'speech/manuAlign_float32_cutEnd_norm/speech_{}.npy'  # in float16 8secs*16000samples/sec
+    __speech_file = 'speech/manuCutAlign_f32_norm_rmDC/speech_{}.npy'  # in float16 8secs*16000samples/sec
+    #__speech_file = 'speech/manuAlign_float32_cutEnd_norm/speech_{}.npy'  # in float16 8secs*16000samples/sec
 else:
     __speech_file = 'speech/manuAlign_float32_cutEnd/speech_{}.npy'  # in float16 8secs*16000samples/sec
     
@@ -174,7 +175,8 @@ def __make_random_batches(inp_list, batch_size):
 
 def get_files_init(batch,overlap):
     tmp = batch[:-1,-overlap:]
-    row1 = numpy.full((1, overlap), 0, dtype='float32')
+    #row1 = numpy.full((1, overlap), 0, dtype='float32')
+    row1 = batch[0:1,:overlap]
     tmp = numpy.concatenate((row1,tmp),axis=0)
     return tmp
 ### SPEECH DATASET LOADER ###

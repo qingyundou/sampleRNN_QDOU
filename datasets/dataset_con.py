@@ -19,8 +19,18 @@ LAB_PERIOD = 0.005
 LAB_SIZE = 80
 LAB_DIM = 601
 
+try:
+    from __main__ import flag_dict
+except ImportError:
+    print "ImportError: cannot import name flag_dict, maybe model.py wasnt run; using defalut flag_dict: quantlab, rmzero, norm, local (not grid)"
+    flag_dict = {}
+    flag_dict['QUANTLAB'] = True
+    flag_dict['RMZERO'] = True
+    flag_dict['NORMED_ALRDY'] = True
+    flag_dict['GRID'] = False
+else:
+    print "Non-ImportError: cannot import name flag_dict"
 
-from __main__ import flag_dict
 FLAG_DIVLAB = False
 FLAG_LESSDATA_DEBUG = False
 FLAG_QUANTLAB = flag_dict['QUANTLAB']
@@ -39,7 +49,8 @@ __music_file = 'music/music_{}.npy'  # in float16 8secs*16000samples/sec
 __huck_file = 'Huckleberry/Huckleberry_{}.npy'  # in float16 8secs*16000samples/sec
 
 if FLAG_NORMED_ALRDY:
-    __speech_file = 'speech/manuAlign_float32_cutEnd_norm/speech_{}.npy'  # in float16 8secs*16000samples/sec
+    __speech_file = 'speech/manuCutAlign_f32_norm_rmDC/speech_{}.npy'  # in float16 8secs*16000samples/sec
+    #__speech_file = 'speech/manuAlign_float32_cutEnd_norm/speech_{}.npy'  # in float16 8secs*16000samples/sec
 else:
     __speech_file = 'speech/manuAlign_float32_cutEnd/speech_{}.npy'  # in float16 8secs*16000samples/sec
 __speech_file_lab = 'speech/lab_norm_01_train/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
@@ -232,7 +243,8 @@ def upsample(input_sequences_lab,up_rate):
 
 def get_files_init(batch,overlap):
     tmp = batch[:-1,-overlap:]
-    row1 = numpy.full((1, overlap), 0, dtype='float32')
+    #row1 = numpy.full((1, overlap), 0, dtype='float32')
+    row1 = batch[0:1,:overlap]
     tmp = numpy.concatenate((row1,tmp),axis=0)
     return tmp
 ### SPEECH DATASET LOADER ###
