@@ -49,11 +49,14 @@ __music_file = 'music/music_{}.npy'  # in float16 8secs*16000samples/sec
 __huck_file = 'Huckleberry/Huckleberry_{}.npy'  # in float16 8secs*16000samples/sec
 
 if FLAG_NORMED_ALRDY:
-    __speech_file = 'speech/manuCutAlign_f32_norm_rmDC/speech_{}.npy'  # in float16 8secs*16000samples/sec
     #__speech_file = 'speech/manuAlign_float32_cutEnd_norm/speech_{}.npy'  # in float16 8secs*16000samples/sec
+    __speech_file = 'speech/manuCutAlign_f32_norm_rmDC/speech_{}.npy'  # in float16 8secs*16000samples/sec
+    __speech_file_lab = 'speech/lab_norm_01_train/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
 else:
-    __speech_file = 'speech/manuAlign_float32_cutEnd/speech_{}.npy'  # in float16 8secs*16000samples/sec
-__speech_file_lab = 'speech/lab_norm_01_train/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
+    #__speech_file = 'speech/manuAlign_float32_cutEnd/speech_{}.npy'  # in float16 8secs*16000samples/sec
+    #__speech_file_lab = 'speech/lab_norm_01_train/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
+    __speech_file = 'speech/MA_f32_CE_5s/speech_{}.npy'
+    __speech_file_lab = 'speech/lab_norm_01_train_5s/speech_{}_lab.npy'  # in float16 5secs*16000samples/sec
 
 __blizz_train_mean_std = np.array([0.0008558356760380169,
                                    0.098437514304141299],

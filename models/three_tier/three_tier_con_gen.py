@@ -166,6 +166,9 @@ def get_args():
 
 args, tag = get_args()
 
+#pdb.set_trace()
+
+
 SEQ_LEN = args.seq_len # How many samples to include in each truncated BPTT pass
 #print "------------------previous SEQ_LEN:", SEQ_LEN
 # TODO: test incremental training
@@ -185,7 +188,6 @@ if args.n_big_rnn==0:
     N_BIG_RNN = N_RNN # how many RNNs to stack in the big-frame-level model
 else:
     N_BIG_RNN = args.n_big_rnn
-#pdb.set_trace()
 
 RNN_TYPE = args.rnn_type
 H0_MULT = 2 if RNN_TYPE == 'LSTM' else 1

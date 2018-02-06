@@ -47,8 +47,9 @@ import lib
 
 import pdb
 
-LEARNING_RATE = 0.001
-
+#LEARNING_RATE = 0.005*10
+#LEARNING_RATE = 0.0002/10
+#LEARNING_RATE = 0.001 #default
 
 
 ### Parsing passed args/hyperparameters ###
@@ -137,13 +138,20 @@ def get_args():
     
     parser.add_argument('--quantlab', help='quantize labels',\
             required=False, default=False, action='store_true')
+    
+    parser.add_argument('--lr', help='learning rate',\
+            type=float, required=False, default='0.001')
+    
+    parser.add_argument('--uc', help='uc starting point',
+            type=str, required=False, default='uncon_para_expand_3t.pkl')
 
     args = parser.parse_args()
 
     # NEW
     # Create tag for this experiment based on passed args
-    tag = reduce(lambda a, b: a+b, sys.argv).replace('--resume', '').replace('/', '-').replace('--', '-').replace('True', 'T').replace('False', 'F')
-    tag += '-lr'+str(LEARNING_RATE)
+    tag_list = [t for t in sys.argv if ('--uc') not in t and '.pkl' not in t]
+    tag = reduce(lambda a, b: a+b, tag_list).replace('--resume', '').replace('/', '-').replace('--', '-').replace('True', 'T').replace('False', 'F')
+    #tag += '-lr'+str(LEARNING_RATE)
     print "Created experiment tag for these args:"
     print tag
     
@@ -151,7 +159,7 @@ def get_args():
     #option1
     #tag = reduce(lambda a, b: a+b, sys.argv[:-4]).replace('--resume', '').replace('/', '-').replace('--', '-').replace('True', 'T').replace('False', 'F')
     #option2
-    tag = tag.replace('-which_setSPEECH','').replace('size','sz').replace('frame','fr').replace('batch','bch').replace('--grid', '')
+    tag = tag.replace('-which_setSPEECH','').replace('size','sz').replace('frame','fr').replace('batch','bch').replace('-grid', '')
     
     #tag += '-lr'+str(LEARNING_RATE)
     
@@ -161,6 +169,7 @@ def get_args():
     return args, tag
 
 args, tag = get_args()
+# pdb.set_trace()
 
 SEQ_LEN = args.seq_len # How many samples to include in each truncated BPTT pass
 #print "------------------previous SEQ_LEN:", SEQ_LEN
@@ -201,7 +210,8 @@ if Q_TYPE == 'mu-law' and Q_LEVELS != 256:
     raise ValueError('For mu-law Quantization levels should be exactly 256!')
 
     
-    
+LEARNING_RATE = float(args.lr)
+UCINIT_DIRFILE = args.uc
     
 ###set FLAGS for options
 flag_dict = {}
@@ -227,9 +237,9 @@ TRAIN_MODE = 'time' # To use PRINT_TIME and STOP_TIME
 # and (STOP_ITERS, STOP_TIME), whichever happened first, for stopping exp.
 PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every N iterations.
 STOP_ITERS = 100000 # Stop after this many iterations
-PRINT_TIME = 12*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
+PRINT_TIME = 72*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
 STOP_TIME = 60*60*24*3 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
-N_SEQS = 10  # Number of samples to generate every time monitoring.
+N_SEQS = 5  # Number of samples to generate every time monitoring.
 RESULTS_DIR = 'results_3t'
 FOLDER_PREFIX = os.path.join(RESULTS_DIR, tag)
 Q_ZERO = numpy.int32(Q_LEVELS//2) # Discrete value correponding to zero amplitude
@@ -768,10 +778,13 @@ FLAG_USETRAIN_WHENTEST = False
 def generate_and_save_samples(tag):
     def write_audio_file(name, data):
         data = data.astype('float32')
-        data -= data.min()
-        data /= data.max()
-        data -= 0.5
-        data *= 0.95
+        #data -= data.min()
+        #data /= data.max()
+        #data -= 0.5
+        #data *= 0.95
+        data -= numpy.mean(data)
+        data /= numpy.absolute(data).max()
+        data /= 2.0
         scipy.io.wavfile.write(
                     os.path.join(SAMPLES_PATH, name+'.wav'),
                     BITRATE,
@@ -906,7 +919,7 @@ tr_feeder = load_data(train_feeder)
 FLAG_UCINIT = True
 if (FLAG_UCINIT and not RESUME):
     print('---loading uncon_para_expand_3t.pkl---')
-    uncon_para_expand_path = 'uncon_para_expand_3t.pkl'
+    uncon_para_expand_path = UCINIT_DIRFILE
     lib.load_params(uncon_para_expand_path)
     print('---loading complete---')
 

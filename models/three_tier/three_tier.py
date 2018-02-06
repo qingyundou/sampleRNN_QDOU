@@ -116,7 +116,7 @@ def get_args():
     parser.add_argument('--which_set', help='ONOM, BLIZZ, MUSIC, or HUCK, or SPEECH',
             choices=['ONOM', 'BLIZZ', 'MUSIC', 'HUCK', 'SPEECH'], required=True)
     parser.add_argument('--batch_size', help='size of mini-batch',
-            type=check_positive, choices=[1, 20, 64, 128, 256], required=True)
+            type=check_positive, choices=[1, 20, 64, 80, 128, 256], required=True)
 
     parser.add_argument('--debug', help='Debug mode', required=False, default=False, action='store_true')
     parser.add_argument('--resume', help='Resume the same model from the last\
@@ -145,7 +145,7 @@ def get_args():
     
     #deal with pb - dir name too long
     #option2
-    tag = tag.replace('-which_setSPEECH','').replace('size','sz').replace('frame','fr').replace('batch','bch').replace('--grid', '')
+    tag = tag.replace('-which_setSPEECH','').replace('size','sz').replace('frame','fr').replace('batch','bch').replace('-grid', '')
     #tag += '-lr'+str(LEARNING_RATE)
     
 
@@ -214,10 +214,15 @@ TRAIN_MODE = 'time' # To use PRINT_TIME and STOP_TIME
 # and (STOP_ITERS, STOP_TIME), whichever happened first, for stopping exp.
 PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every N iterations.
 STOP_ITERS = 100000 # Stop after this many iterations
-PRINT_TIME = 12*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
+PRINT_TIME = 72*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
 STOP_TIME = 60*60*24*3 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
-N_SEQS = 10  # Number of samples to generate every time monitoring.
+N_SEQS = 5  # Number of samples to generate every time monitoring.
+###
 RESULTS_DIR = 'results_3t'
+#if WHICH_SET != 'SPEECH': RESULTS_DIR += ('/'+WHICH_SET)
+#if WHICH_SET == 'SPEECH': RESULTS_DIR += ('/'+WHICH_SET)
+
+###
 FOLDER_PREFIX = os.path.join(RESULTS_DIR, tag)
 Q_ZERO = numpy.int32(Q_LEVELS//2) # Discrete value correponding to zero amplitude
 
@@ -275,6 +280,10 @@ elif WHICH_SET == 'HUCK':
     from datasets.dataset import huck_valid_feed_epoch as valid_feeder
     from datasets.dataset import huck_test_feed_epoch  as test_feeder
 elif WHICH_SET == 'SPEECH':
+    from datasets.dataset import speech_train_feed_epoch as train_feeder
+    from datasets.dataset import speech_valid_feed_epoch as valid_feeder
+    from datasets.dataset import speech_test_feed_epoch  as test_feeder
+elif WHICH_SET == 'LESLEY':
     from datasets.dataset import speech_train_feed_epoch as train_feeder
     from datasets.dataset import speech_valid_feed_epoch as valid_feeder
     from datasets.dataset import speech_test_feed_epoch  as test_feeder
@@ -692,10 +701,13 @@ fixed_rand_big_h0 = fixed_rand_big_h0.astype('float32')
 def generate_and_save_samples(tag):
     def write_audio_file(name, data):
         data = data.astype('float32')
-        data -= data.min()
-        data /= data.max()
-        data -= 0.5
-        data *= 0.95
+        # data -= data.min()
+        # data /= data.max()
+        # data -= 0.5
+        # data *= 0.95
+        data -= numpy.mean(data)
+        data /= numpy.absolute(data).max()
+        data /= 2.0
         scipy.io.wavfile.write(
                     os.path.join(SAMPLES_PATH, name+'.wav'),
                     BITRATE,

@@ -14,20 +14,25 @@ def runCMD(cmd):
 
 #1 copy data to air
 #1.1 check directory
-directory = '/scratch/qd212/datasets/speech/manuCutAlign_f32_norm_rmDC'#version2, replacing the line below
-#directory = '/scratch/qd212/datasets'
 
-FLAG_DATA_ALREADY = checkMakeDir(directory)
+src_all_dataset_dir = '/home/dawna/tts/qd212/mphilproj/sampleRNN_QDOU/datasets/speech/'
+src_all_dataset_list = os.listdir(src_all_dataset_dir)
+
+tgt_all_dataset_dir = '/scratch/qd212/datasets/speech/'
+FLAG_DATA_ALREADY = checkMakeDir(tgt_all_dataset_dir)
+tgt_all_dataset_list = os.listdir(tgt_all_dataset_dir)
+
 
 
 #1.2 if not already there, make dir and move data
-if FLAG_DATA_ALREADY:
-    print('data found on air')
-else:
-    print('data not found on air, moving ...')
-    directory = '/scratch/qd212/datasets' #version2, newly added
-    cmd = 'cp -r /home/dawna/tts/qd212/mphilproj/sampleRNN_QDOU/datasets/speech ' + directory
-    output,err = runCMD(cmd)
-    print('output: \n'+str(output))
-    print('err: \n'+str(err))
-    print('moving complete!')
+#loop over src, if not found in tgt, copy
+for dataset in src_all_dataset_list:
+    if dataset not in tgt_all_dataset_list:
+        cmd = 'cp -r {s} {t}'.format(
+            s=os.path.join(src_all_dataset_dir,dataset),
+            t=os.path.join(tgt_all_dataset_dir,dataset))
+        print('moving with cmd: '+cmd)
+        output,err = runCMD(cmd)
+        print('output: '+str(output))
+        print('err: '+str(err))
+        print('moving complete!')

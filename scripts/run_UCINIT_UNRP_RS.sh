@@ -1,5 +1,6 @@
 #0 preparation
-NAME=UNRP_RS #////////////////////////////////////TBC
+#NAME=UNRP_RS
+NAME=UCINIT_UNRP_RS #////////////////////////////////////TBC
 #ulaw, normed already, remove zero, precise lab when running conditional model
 #remove DC offset, fix bug in rmzero by copying silence
 

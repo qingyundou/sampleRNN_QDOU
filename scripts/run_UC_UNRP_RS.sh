@@ -1,5 +1,5 @@
 #0 preparation
-NAME=UNRP_RS #////////////////////////////////////TBC
+NAME=UC_UNRP_RS #////////////////////////////////////TBC
 #ulaw, normed already, remove zero, precise lab (or not) when running conditional model
 #remove DC offset, fix bug in rmzero by copying silence
 
@@ -25,7 +25,7 @@ unset LD_PRELOAD
 
 #2.3 key cmd
 #---------------------------key cmd
-python -u models/three_tier/three_tier.py --exp ${NAME} --seq_len 800 --big_frame_size 80 --frame_size 20 --emb_size 256 --skip_conn False --dim 1024 --n_rnn 3 --rnn_type GRU --q_levels 256 --q_type mu-law --batch_size 20 --weight_norm True --learn_h0 True --which_set SPEECH --n_big_rnn 1 --normed --rmzero --grid --resume
+python -u models/three_tier/three_tier.py --exp ${NAME} --seq_len 800 --big_frame_size 80 --frame_size 10 --emb_size 256 --skip_conn False --dim 1024 --n_rnn 3 --rnn_type GRU --q_levels 256 --q_type mu-law --batch_size 20 --weight_norm True --learn_h0 True --which_set SPEECH --n_big_rnn 1 --normed --rmzero --grid --resume
 #---------------------------key cmd
 
 #2.4 move log file

@@ -2,9 +2,10 @@
 bkup_data/
 bkup/
 scripts/asup
+scripts/bkup*
 scripts/autolog
 scripts/run_past
-
+scripts/*.sh
 
 
 results_2t/
