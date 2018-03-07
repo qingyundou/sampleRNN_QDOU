@@ -114,7 +114,7 @@ def get_args():
             or mu-law compandig. With mu-/a-law quantization level shoud be set as 256',\
             choices=['linear', 'a-law', 'mu-law'], required=True)
     parser.add_argument('--which_set', help='ONOM, BLIZZ, MUSIC, or HUCK, or SPEECH',
-            choices=['ONOM', 'BLIZZ', 'MUSIC', 'HUCK', 'SPEECH'], required=True)
+            choices=['ONOM', 'BLIZZ', 'MUSIC', 'HUCK', 'SPEECH', 'LESLEY'], required=True)
     parser.add_argument('--batch_size', help='size of mini-batch',
             type=check_positive, choices=[1, 20, 64, 80, 128, 256], required=True)
 
@@ -146,6 +146,7 @@ def get_args():
     #deal with pb - dir name too long
     #option2
     tag = tag.replace('-which_setSPEECH','').replace('size','sz').replace('frame','fr').replace('batch','bch').replace('-grid', '')
+    tag = tag.replace('-which_setLESLEY','')
     #tag += '-lr'+str(LEARNING_RATE)
     
 
@@ -197,6 +198,7 @@ flag_dict = {}
 flag_dict['RMZERO'] = args.rmzero
 flag_dict['NORMED_ALRDY'] = args.normed
 flag_dict['GRID'] = args.grid
+flag_dict['WHICH_SET'] = args.which_set
 
 
 # Fixed hyperparams
@@ -219,8 +221,7 @@ STOP_TIME = 60*60*24*3 # Stop after this many seconds of actual training (not in
 N_SEQS = 5  # Number of samples to generate every time monitoring.
 ###
 RESULTS_DIR = 'results_3t'
-#if WHICH_SET != 'SPEECH': RESULTS_DIR += ('/'+WHICH_SET)
-#if WHICH_SET == 'SPEECH': RESULTS_DIR += ('/'+WHICH_SET)
+if WHICH_SET != 'SPEECH': RESULTS_DIR = os.path.join(RESULTS_DIR, WHICH_SET)
 
 ###
 FOLDER_PREFIX = os.path.join(RESULTS_DIR, tag)
@@ -450,8 +451,8 @@ def frame_level_rnn(input_sequences, other_input, h0, reset):
 
 def sample_level_predictor(frame_level_outputs, prev_samples):
     """
-    frame_level_outputs.shape: (batch size, DIM)
-    prev_samples.shape:        (batch size, FRAME_SIZE)
+    frame_level_outputs.shape: (batch size, DIM) -> (BATCH_SIZE * SEQ_LEN, DIM)
+    prev_samples.shape:        (batch size, FRAME_SIZE) -> (BATCH_SIZE * SEQ_LEN, FRAME_SIZE)
     output.shape:              (batch size, Q_LEVELS)
     """
     # Handling EMB_SIZE

@@ -117,7 +117,7 @@ def get_args():
             or mu-law compandig. With mu-/a-law quantization level shoud be set as 256',\
             choices=['linear', 'a-law', 'mu-law'], required=True)
     parser.add_argument('--which_set', help='ONOM, BLIZZ, MUSIC, or HUCK, or SPEECH',
-            choices=['ONOM', 'BLIZZ', 'MUSIC', 'HUCK', 'SPEECH'], required=True)
+            choices=['ONOM', 'BLIZZ', 'MUSIC', 'HUCK', 'SPEECH', 'LESLEY'], required=True)
     parser.add_argument('--batch_size', help='size of mini-batch',
             type=check_positive, choices=[1, 20, 64, 80, 128, 256], required=True)
 
@@ -143,7 +143,7 @@ def get_args():
             type=float, required=False, default='0.001')
     
     parser.add_argument('--uc', help='uc starting point',
-            type=str, required=False, default='uncon_para_expand_3t.pkl')
+            type=str, required=False, default='flat_start')
 
     args = parser.parse_args()
 
@@ -160,7 +160,7 @@ def get_args():
     #tag = reduce(lambda a, b: a+b, sys.argv[:-4]).replace('--resume', '').replace('/', '-').replace('--', '-').replace('True', 'T').replace('False', 'F')
     #option2
     tag = tag.replace('-which_setSPEECH','').replace('size','sz').replace('frame','fr').replace('batch','bch').replace('-grid', '')
-    
+    tag = tag.replace('-which_setLESLEY','')
     #tag += '-lr'+str(LEARNING_RATE)
     
     #maxTag = 200
@@ -219,6 +219,7 @@ flag_dict['RMZERO'] = args.rmzero
 flag_dict['NORMED_ALRDY'] = args.normed
 flag_dict['GRID'] = args.grid
 flag_dict['QUANTLAB'] = args.quantlab
+flag_dict['WHICH_SET'] = args.which_set
 
 FLAG_QUANTLAB = flag_dict['QUANTLAB']
 
@@ -241,6 +242,8 @@ PRINT_TIME = 72*60*60 # Print cost, generate samples, save model checkpoint ever
 STOP_TIME = 60*60*24*3 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
 N_SEQS = 5  # Number of samples to generate every time monitoring.
 RESULTS_DIR = 'results_3t'
+if WHICH_SET != 'SPEECH': RESULTS_DIR = os.path.join(RESULTS_DIR, WHICH_SET)
+
 FOLDER_PREFIX = os.path.join(RESULTS_DIR, tag)
 Q_ZERO = numpy.int32(Q_LEVELS//2) # Discrete value correponding to zero amplitude
 
@@ -304,6 +307,10 @@ elif WHICH_SET == 'HUCK':
     from datasets.dataset import huck_valid_feed_epoch as valid_feeder
     from datasets.dataset import huck_test_feed_epoch  as test_feeder
 elif WHICH_SET == 'SPEECH':
+    from datasets.dataset_con import speech_train_feed_epoch as train_feeder
+    from datasets.dataset_con import speech_valid_feed_epoch as valid_feeder
+    from datasets.dataset_con import speech_test_feed_epoch  as test_feeder
+elif WHICH_SET == 'LESLEY':
     from datasets.dataset_con import speech_train_feed_epoch as train_feeder
     from datasets.dataset_con import speech_valid_feed_epoch as valid_feeder
     from datasets.dataset_con import speech_test_feed_epoch  as test_feeder
@@ -595,6 +602,7 @@ else:
 if args.debug:
     # Solely for debugging purposes.
     # Maybe I should set the compute_test_value=warn from here.
+    theano.config.compute_test_value = 'warn'
     sequences.tag.test_value = numpy.zeros((BATCH_SIZE, SEQ_LEN+OVERLAP), dtype='int32')
     h0.tag.test_value = numpy.zeros((BATCH_SIZE, N_RNN, H0_MULT*DIM), dtype='float32')
     big_h0.tag.test_value = numpy.zeros((BATCH_SIZE, N_RNN, H0_MULT*BIG_DIM), dtype='float32')
@@ -793,7 +801,7 @@ def generate_and_save_samples(tag):
     total_time = time()
     # Generate N_SEQS' sample files, each 5 seconds long
     N_SECS = 5
-    LENGTH = N_SECS*BITRATE if not args.debug else 100
+    LENGTH = N_SECS*BITRATE if not args.debug else 160 #before it was 100, but 160 was better as it should be divisible by 80
 
     samples = numpy.zeros((N_SEQS, LENGTH), dtype='int32')
 
@@ -843,7 +851,8 @@ def generate_and_save_samples(tag):
             )
 
         if t % FRAME_SIZE == 0:
-            tmp = samples_lab[:,(t-FRAME_SIZE)//FRAME_SIZE,:]
+            tmp = samples_lab[:,(t-BIG_FRAME_SIZE)//FRAME_SIZE,:]
+            # tmp = samples_lab[:,(t-FRAME_SIZE)//FRAME_SIZE,:] #classic, but might introduce a slight mis-alignment
             tmp = tmp.reshape(tmp.shape[0],1,tmp.shape[1])
             
             frame_level_outputs, h0 = frame_level_generate_fn(
@@ -916,7 +925,8 @@ big_h0 = numpy.zeros((BATCH_SIZE, N_RNN, H0_MULT*BIG_DIM), dtype='float32')
 tr_feeder = load_data(train_feeder)
 
 ### start from uncon
-FLAG_UCINIT = True
+if UCINIT_DIRFILE == 'flat_start': FLAG_UCINIT = False
+else: FLAG_UCINIT = True
 if (FLAG_UCINIT and not RESUME):
     print('---loading uncon_para_expand_3t.pkl---')
     uncon_para_expand_path = UCINIT_DIRFILE

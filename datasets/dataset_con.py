@@ -28,12 +28,14 @@ except ImportError:
     flag_dict['RMZERO'] = True
     flag_dict['NORMED_ALRDY'] = True
     flag_dict['GRID'] = False
+    flag_dict['WHICH_SET'] = 'SPEECH'
 else:
     print "Non-ImportError: cannot import name flag_dict"
 
 FLAG_DIVLAB = False
 FLAG_LESSDATA_DEBUG = False
 FLAG_QUANTLAB = flag_dict['QUANTLAB']
+WHICH_SET = flag_dict['WHICH_SET']
 
 FLAG_RMZERO = flag_dict['RMZERO']
 FLAG_NORMED_ALRDY = flag_dict['NORMED_ALRDY']
@@ -49,14 +51,27 @@ __music_file = 'music/music_{}.npy'  # in float16 8secs*16000samples/sec
 __huck_file = 'Huckleberry/Huckleberry_{}.npy'  # in float16 8secs*16000samples/sec
 
 if FLAG_NORMED_ALRDY:
-    #__speech_file = 'speech/manuAlign_float32_cutEnd_norm/speech_{}.npy'  # in float16 8secs*16000samples/sec
-    __speech_file = 'speech/manuCutAlign_f32_norm_rmDC/speech_{}.npy'  # in float16 8secs*16000samples/sec
-    __speech_file_lab = 'speech/lab_norm_01_train/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
+    if WHICH_SET == 'SPEECH':
+        #__speech_file = 'speech/manuAlign_float32_cutEnd_norm/speech_{}.npy'  # in float16 8secs*16000samples/sec
+        __speech_file = 'speech/manuCutAlign_f32_norm_rmDC/speech_{}.npy'  # normed on cps level: zero mean
+        # __speech_file = 'speech/ln_MA_f32_CE_8s_norm_utt/speech_{}.npy'  # normed on utt level: zero mean, increased volume
+        __speech_file_lab = 'speech/lab_norm_01_train/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
+    if WHICH_SET == 'LESLEY':
+        __speech_file = 'speech/ln_16k_resil_Lesley_norm_utt/speech_{}.npy'  # lesley data
+        __speech_file_lab = 'speech/ln_16k_resil_Lesley_lab_norm/speech_{}_lab.npy'  # lesley data
 else:
-    #__speech_file = 'speech/manuAlign_float32_cutEnd/speech_{}.npy'  # in float16 8secs*16000samples/sec
-    #__speech_file_lab = 'speech/lab_norm_01_train/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
-    __speech_file = 'speech/MA_f32_CE_5s/speech_{}.npy'
-    __speech_file_lab = 'speech/lab_norm_01_train_5s/speech_{}_lab.npy'  # in float16 5secs*16000samples/sec
+    if WHICH_SET == 'SPEECH':
+        __speech_file = 'speech/manuAlign_float32_cutEnd/speech_{}.npy'  # in float16 8secs*16000samples/sec
+        __speech_file_lab = 'speech/lab_norm_01_train/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
+        # __speech_file = 'speech/MA_f32_CE_5s/speech_{}.npy'
+        # __speech_file_lab = 'speech/lab_norm_01_train_5s/speech_{}_lab.npy'  # in float16 5secs*16000samples/sec
+    if WHICH_SET == 'LESLEY':
+        __speech_file = 'speech/16k_resil_Lesley/speech_{}.npy'  # lesley data
+        __speech_file_lab = 'speech/ln_16k_resil_Lesley_lab_norm/speech_{}_lab.npy'  # lesley data
+
+print 'dir for wav and lab:'
+print __speech_file
+print __speech_file_lab
 
 __blizz_train_mean_std = np.array([0.0008558356760380169,
                                    0.098437514304141299],
@@ -280,8 +295,10 @@ def __speech_feed_epoch(files,
     print('')
     if FLAG_RMZERO: print('REMINDER: starting from real data')
     else: print('REMINDER: starting from q_zeros')
-    if FLAG_NORMED_ALRDY: print('REMINDER: normalize on corpus level')
-    else: print('REMINDER: normalize on sentence level')
+    if FLAG_NORMED_ALRDY: print('REMINDER: normalized already')
+    else: print('REMINDER: normalize when running the exp, on sentence level')
+    print 'wav dir: '+__speech_file
+    print 'lab dir: '+__speech_file_lab
     if FLAG_GRID: print('REMINDER: using data on air')
     else: print('REMINDER: using local data')
         
