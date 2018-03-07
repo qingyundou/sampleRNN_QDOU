@@ -28,9 +28,10 @@ tgt_all_dataset_list = os.listdir(tgt_all_dataset_dir)
 #loop over src, if not found in tgt, copy
 for dataset in src_all_dataset_list:
     if dataset not in tgt_all_dataset_list:
-        cmd = 'cp -r {s} {t}'.format(
-            s=os.path.join(src_all_dataset_dir,dataset),
-            t=os.path.join(tgt_all_dataset_dir,dataset))
+        s = os.path.join(src_all_dataset_dir,dataset)
+        t = os.path.join(tgt_all_dataset_dir,dataset)
+        checkMakeDir(t)
+        cmd = 'cp -r {s}/* {t}/'.format(s=s,t=t)
         print('moving with cmd: '+cmd)
         output,err = runCMD(cmd)
         print('output: '+str(output))
