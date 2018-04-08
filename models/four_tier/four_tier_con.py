@@ -130,11 +130,15 @@ def get_args():
             required=False, default=False, action='store_true')
     parser.add_argument('--normed', help='normalize data on corpus level',\
             required=False, default=False, action='store_true')
+    parser.add_argument('--utt', help='normalize data on utt level',\
+            required=False, default=False, action='store_true')
     parser.add_argument('--grid', help='use data on air',\
             required=False, default=False, action='store_true')
     
     parser.add_argument('--frame_size_nargs', help='list of frame sizes for ALL tiers', nargs='+', type=int, required=True)
     parser.add_argument('--rnn_depth_nargs', help='list of rnn depth for ALL tiers', nargs='+', type=int, required=True)
+    parser.add_argument('--frame_size_dnn', help='How many previous samples per setp for DNN',\
+            type=check_positive, required=False, default=0)
     
     parser.add_argument('--quantlab', help='quantize labels',\
             required=False, default=False, action='store_true')
@@ -172,6 +176,9 @@ BIG_FRAME_SIZE = FRAME_SIZE_LIST[0] # how many samples per big frame
 FRAME_SIZE_1 = FRAME_SIZE_LIST[1] # How many samples per frame
 FRAME_SIZE_2 = FRAME_SIZE_LIST[2] # How many samples per frame
 FRAME_SIZE_LIST.append(1) #sample level tier
+
+FRAME_SIZE_DNN = args.frame_size_dnn # How many previous samples per setp for DNN
+if FRAME_SIZE_DNN==0: FRAME_SIZE_DNN = FRAME_SIZE_2
 
 # N_RNN = args.n_rnn # How many RNNs to stack in the frame-level model
 # if args.n_big_rnn==0:
@@ -219,6 +226,7 @@ UCINIT_DIRFILE = args.uc
 flag_dict = {}
 flag_dict['RMZERO'] = args.rmzero
 flag_dict['NORMED_ALRDY'] = args.normed
+flag_dict['NORMED_UTT'] = args.utt
 flag_dict['GRID'] = args.grid
 flag_dict['QUANTLAB'] = args.quantlab
 flag_dict['WHICH_SET'] = args.which_set
@@ -246,7 +254,7 @@ PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every 
 STOP_ITERS = 100000 # Stop after this many iterations
 PRINT_TIME = 72*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
 STOP_TIME = 60*60*24*3 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
-if not RESUME: STOP_TIME*=2
+if not RESUME: STOP_TIME = 60*60*24*3.9
 N_SEQS = 5  # Number of samples to generate every time monitoring.
 ###
 RESULTS_DIR = 'results_4t'
@@ -512,8 +520,8 @@ def frame_level_rnn(input_sequences, input_sequences_lab, other_input, h0, reset
 
 def sample_level_predictor(frame_level_outputs, prev_samples):
     """
-    frame_level_outputs.shape: (batch size, DIM)
-    prev_samples.shape:        (batch size, FRAME_SIZE)
+    frame_level_outputs.shape: (batch size, DIM) -> (BATCH_SIZE * SEQ_LEN, DIM)
+    prev_samples.shape:        (batch size, FRAME_SIZE) -> (BATCH_SIZE * SEQ_LEN, FRAME_SIZE_DNN)
     output.shape:              (batch size, Q_LEVELS)
     """
     print 'in sample_level_predictor'
@@ -523,7 +531,7 @@ def sample_level_predictor(frame_level_outputs, prev_samples):
     # Handling EMB_SIZE
     if EMB_SIZE == 0:  # no support for one-hot in three_tier and one_tier.
         prev_samples = lib.ops.T_one_hot(prev_samples, Q_LEVELS)
-        # (BATCH_SIZE*N_FRAMES*FRAME_SIZE, FRAME_SIZE, Q_LEVELS)
+        # (BATCH_SIZE*N_FRAMES*FRAME_SIZE, FRAME_SIZE_DNN, Q_LEVELS)
         last_out_shape = Q_LEVELS
     elif EMB_SIZE > 0:
         prev_samples = lib.ops.Embedding(
@@ -531,16 +539,16 @@ def sample_level_predictor(frame_level_outputs, prev_samples):
             Q_LEVELS,
             EMB_SIZE,
             prev_samples)
-        # (BATCH_SIZE*N_FRAMES*FRAME_SIZE, FRAME_SIZE, EMB_SIZE), f32
+        # (BATCH_SIZE*N_FRAMES*FRAME_SIZE, FRAME_SIZE_DNN, EMB_SIZE), f32
         last_out_shape = EMB_SIZE
     else:
         raise ValueError('EMB_SIZE cannot be negative.')
 
-    prev_samples = prev_samples.reshape((-1, FRAME_SIZE * last_out_shape))
+    prev_samples = prev_samples.reshape((-1, FRAME_SIZE_DNN * last_out_shape))
 
     out = lib.ops.Linear(
         'SampleLevel.L1_PrevSamples',
-        FRAME_SIZE * last_out_shape,
+        FRAME_SIZE_DNN * last_out_shape,
         DIM,
         prev_samples,
         biases=False,
@@ -597,7 +605,7 @@ else:
 if args.debug:
     # Solely for debugging purposes.
     # Maybe I should set the compute_test_value=warn from here.
-    theano.config.compute_test_value = 'warn'
+    # theano.config.compute_test_value = 'warn'
     sequences.tag.test_value = numpy.zeros((BATCH_SIZE, SEQ_LEN+OVERLAP), dtype='int32')
     h0_1.tag.test_value = numpy.zeros((BATCH_SIZE, N_RNN_LIST[1], H0_MULT*DIM), dtype='float32')
     h0_2.tag.test_value = numpy.zeros((BATCH_SIZE, N_RNN_LIST[2], H0_MULT*DIM), dtype='float32')
@@ -622,10 +630,10 @@ frame_level_outputs_2, new_h0_2 = frame_level_rnn(input_sequences_2, sequences_l
 
 
 
-prev_samples = sequences[:, BIG_FRAME_SIZE-FRAME_SIZE_2:-1]
+prev_samples = sequences[:, BIG_FRAME_SIZE-FRAME_SIZE_DNN:-1]
 prev_samples = prev_samples.reshape((1, BATCH_SIZE, 1, -1))
-prev_samples = T.nnet.neighbours.images2neibs(prev_samples, (1, FRAME_SIZE_2), neib_step=(1, 1), mode='valid')
-prev_samples = prev_samples.reshape((BATCH_SIZE * SEQ_LEN, FRAME_SIZE_2))
+prev_samples = T.nnet.neighbours.images2neibs(prev_samples, (1, FRAME_SIZE_DNN), neib_step=(1, 1), mode='valid')
+prev_samples = prev_samples.reshape((BATCH_SIZE * SEQ_LEN, FRAME_SIZE_DNN))
 
 
 sample_level_outputs = sample_level_predictor(
@@ -853,7 +861,7 @@ def generate_and_save_samples(tag):
 
         samples[:, t] = sample_level_generate_fn(
             frame_level_outputs_2[:, t % FRAME_SIZE_2],
-            samples[:, t-FRAME_SIZE_2:t]
+            samples[:, t-FRAME_SIZE_DNN:t]
         )
 
     total_time = time() - total_time
