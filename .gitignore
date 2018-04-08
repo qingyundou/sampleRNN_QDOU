@@ -1,4 +1,8 @@
 #directories
+models/three_tier/bkup_*/
+datasets/REF_TEST_RMDC/
+datasets/asup_dataset.py
+
 bkup_data/
 bkup/
 scripts/asup
