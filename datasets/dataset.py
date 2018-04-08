@@ -15,6 +15,17 @@ import glob
 from __main__ import flag_dict
 FLAG_RMZERO = flag_dict['RMZERO']
 FLAG_NORMED_ALRDY = flag_dict['NORMED_ALRDY']
+# FLAG_NORMED_UTT = flag_dict['NORMED_UTT']
+#try code is temporary, when all old exps are ok, the first line is enough
+try:
+    FLAG_NORMED_UTT = flag_dict['NORMED_UTT']
+except KeyError:
+    print "KeyError: maybe NORMED_UTT was not defined in main code"
+    FLAG_NORMED_UTT = False
+# else:
+#     print "other error"
+#     FLAG_NORMED_UTT = False
+
 WHICH_SET = flag_dict['WHICH_SET']
 
 FLAG_GRID = flag_dict['GRID']
@@ -30,9 +41,11 @@ __huck_file = 'Huckleberry/Huckleberry_{}.npy'  # in float16 8secs*16000samples/
 
 if FLAG_NORMED_ALRDY:
     if WHICH_SET == 'SPEECH':
-        # __speech_file = 'speech/ln_MA_f32_CE_8s_norm_utt/speech_{}.npy'  # normed on utt level: zero mean, increased volume
-        __speech_file = 'speech/manuCutAlign_f32_norm_rmDC/speech_{}.npy'  # normed on cps level: zero mean
-        #__speech_file = 'speech/manuAlign_float32_cutEnd_norm/speech_{}.npy'  # in float16 8secs*16000samples/sec
+        if FLAG_NORMED_UTT:
+            __speech_file = 'speech/ln_MA_f32_CE_8s_norm_utt/speech_{}.npy'  # normed on utt level: zero mean, increased volume
+        else:
+            __speech_file = 'speech/manuCutAlign_f32_norm_rmDC/speech_{}.npy'  # normed on cps level: zero mean
+            #__speech_file = 'speech/manuAlign_float32_cutEnd_norm/speech_{}.npy'  # in float16 8secs*16000samples/sec
     if WHICH_SET == 'LESLEY':
         __speech_file = 'speech/ln_16k_resil_Lesley_norm_utt/speech_{}.npy'  # lesley data
 else:
