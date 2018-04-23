@@ -247,14 +247,18 @@ TRAIN_MODE = 'time' # To use PRINT_TIME and STOP_TIME
 #TRAIN_MODE = 'time-iters'
 # To use PRINT_TIME for validation,
 # and (STOP_ITERS, STOP_TIME), whichever happened first, for stopping exp.
-#TRAIN_MODE = 'iters-time'
+# TRAIN_MODE = 'iters-time'
 # To use PRINT_ITERS for validation,
 # and (STOP_ITERS, STOP_TIME), whichever happened first, for stopping exp.
-PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every N iterations.
-STOP_ITERS = 100000 # Stop after this many iterations
+# PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every N iterations.
+# STOP_ITERS = 100000 # Stop after this many iterations
+PRINT_ITERS = 50 # Print cost, generate samples, save model checkpoint every N iterations.
+STOP_ITERS = 100 # Stop after this many iterations
+if RESUME: STOP_ITERS += 50
+
 PRINT_TIME = 72*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
 STOP_TIME = 60*60*24*3 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
-if not RESUME: STOP_TIME = 60*60*24*3.9
+if not RESUME: STOP_TIME = 60*60*24*3.5
 N_SEQS = 5  # Number of samples to generate every time monitoring.
 ###
 RESULTS_DIR = 'results_4t'
@@ -919,6 +923,8 @@ new_lowest_cost = False
 end_of_batch = False
 epoch = 0
 
+cost_log_list = []
+
 h0_1 = numpy.zeros((BATCH_SIZE, N_RNN_LIST[1], H0_MULT*DIM), dtype='float32')
 h0_2 = numpy.zeros((BATCH_SIZE, N_RNN_LIST[2], H0_MULT*DIM), dtype='float32')
 big_h0 = numpy.zeros((BATCH_SIZE, N_RNN_LIST[0], H0_MULT*BIG_DIM), dtype='float32')
@@ -961,6 +967,16 @@ if RESUME:
 
     lib.load_params(res_path)
     print "Parameters from last available checkpoint loaded."
+    
+    # # dirFile = res_path.replace('params_', 'updates_').replace('pkl','npy')
+    # dirFile = res_path.replace('params_', 'updates_')
+    # lib.load_updates(dirFile,updates)
+    # dirFile = os.path.join(PARAMS_PATH, 'costs.pkl')
+    # cost_log_list = lib.load_costs(dirFile)
+    
+    lib.load_updates(res_path,updates)
+    cost_log_list = lib.load_costs(PARAMS_PATH)
+    print "Updates from last available checkpoint loaded."
 
 FLAG_DEBUG_SAMPLE = False
 if FLAG_DEBUG_SAMPLE:
@@ -1001,6 +1017,7 @@ while True:
     #print "This cost:", cost, "This h0.mean()", h0.mean()
 
     costs.append(cost)
+    cost_log_list.append(cost)
 
     # Monitoring step
     if (TRAIN_MODE=='iters' and total_iters-last_print_iters == PRINT_ITERS) or \
@@ -1063,6 +1080,14 @@ while True:
                 os.path.join(PARAMS_PATH, 'params_{}.pkl'.format(tag))
         )
         print "Done!"
+        #save updates
+        print 'saving updates, costs'
+        # #lib.save_updates(os.path.join(PARAMS_PATH, 'updates_{}'.format(tag)), updates)
+        # lib.save_updates(os.path.join(PARAMS_PATH, 'updates_{}.pkl'.format(tag)), updates)
+        lib.save_updates(PARAMS_PATH,tag, updates)
+        # lib.save_costs(os.path.join(PARAMS_PATH, 'costs.pkl'),cost_log_list)
+        lib.save_costs(PARAMS_PATH,cost_log_list)
+        print 'complete!'
 
         # 4. Save and graph training progress (fast)
         training_info = {epoch_str : epoch,

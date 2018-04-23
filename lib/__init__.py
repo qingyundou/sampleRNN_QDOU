@@ -7,11 +7,13 @@ import time
 import locale
 
 import numpy
+np = numpy
 import theano
 import theano.tensor as T
 import theano.gof
 
-import cPickle as pickle
+import cPickle
+pickle = cPickle
 #import pickle
 import warnings
 import sys, os, errno, glob
@@ -93,20 +95,97 @@ def floatX(x):
         print "Warning: lib.floatX using float64"
         return numpy.float64(x)
 
+#v0
 def save_params(path):
     param_vals = {}
     for name, param in _params.iteritems():
         param_vals[name] = param.get_value()
-
     with open(path, 'wb') as f:
         pickle.dump(param_vals, f)
-
 def load_params(path):
     with open(path, 'rb') as f:
         param_vals = pickle.load(f)
-
     for name, val in param_vals.iteritems():
         _params[name].set_value(val)
+
+#v1 HIGHEST_PROTOCOL
+# def save_params(path):
+#     param_vals = {}
+#     for name, param in _params.iteritems():
+#         param_vals[name] = param.get_value()
+#     with open(path, 'wb') as f:
+#         pickle.dump(param_vals, f, protocol=cPickle.HIGHEST_PROTOCOL)
+# def load_params(path):
+#     with open(path, 'rb') as f:
+#         param_vals = pickle.load(f)
+#     for name, val in param_vals.iteritems():
+#         _params[name].set_value(val)
+
+
+#updates is an orderedDict, a newly created class
+#v-1
+# def save_updates(dirFile, updates):
+#     all_values = [item.get_value() for item in updates]
+#     np.save(dirFile, all_values, allow_pickle=True )
+#     return
+# def load_updates(dirFile, updates):
+#     all_values_loaded = np.load(dirFile)
+#     for u, v in zip(updates, all_values_loaded):
+#         u.set_value(v)
+#     return
+
+#v0 better input, more universal
+def save_updates(PARAMS_PATH, tag, updates):
+    dirFile = os.path.join(PARAMS_PATH, 'updates_{}'.format(tag))
+    all_values = [item.get_value() for item in updates]
+    np.save(dirFile, all_values, allow_pickle=True )
+    return
+def load_updates(res_path, updates):
+    dirFile = res_path.replace('params_', 'updates_').replace('pkl', 'npy')
+    all_values_loaded = np.load(dirFile)
+    for u, v in zip(updates, all_values_loaded):
+        u.set_value(v)
+    return
+
+#v1 use pkl, not npy
+# def save_updates(PARAMS_PATH, tag, updates):
+#     dirFile = os.path.join(PARAMS_PATH, 'updates_{}.pkl'.format(tag))
+#     all_values = [item.get_value() for item in updates]
+#     with open(dirFile, 'wb') as f: pickle.dump(all_values, f, protocol=cPickle.HIGHEST_PROTOCOL)
+#     return
+# def load_updates(res_path, updates):
+#     dirFile = res_path.replace('params_', 'updates_')
+#     with open(dirFile, 'rb') as f: all_values_loaded = pickle.load(f)
+#     for u, v in zip(updates, all_values_loaded):
+#         u.set_value(v)
+#     return
+
+
+#v0
+# def save_costs(dirFile,cost_log_list):
+#     np.save(dirFile, cost_log_list, allow_pickle=True )
+#     return
+# def load_costs(dirFile):
+#     return np.load(dirFile)
+
+#v1 use pkl, not npy
+# def save_costs(dirFile,cost_log_list):
+#     with open(dirFile, 'wb') as f: pickle.dump(cost_log_list, f)
+#     return
+# def load_costs(dirFile):
+#     with open(dirFile, 'rb') as f: cost_log_list = pickle.load(f)
+#     return cost_log_list
+
+#v2 better input, more universial
+def save_costs(PARAMS_PATH,cost_log_list):
+    dirFile = os.path.join(PARAMS_PATH, 'costs.pkl')
+    with open(dirFile, 'wb') as f: pickle.dump(cost_log_list, f)
+    return
+def load_costs(PARAMS_PATH):
+    dirFile = os.path.join(PARAMS_PATH, 'costs.pkl')
+    with open(dirFile, 'rb') as f: cost_log_list = pickle.load(f)
+    return cost_log_list
+
 
 def clear_all_params():
     to_delete = [p_name for p_name in _params]

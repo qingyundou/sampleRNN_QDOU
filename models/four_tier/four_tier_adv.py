@@ -46,6 +46,7 @@ import scipy.io.wavfile
 import lib
 
 import pdb
+import cPickle as pickle
 
 LEARNING_RATE = 0.001
 
@@ -239,8 +240,11 @@ TRAIN_MODE = 'iters-time'
 # and (STOP_ITERS, STOP_TIME), whichever happened first, for stopping exp.
 # PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every N iterations.
 # STOP_ITERS = 100000 # Stop after this many iterations
-PRINT_ITERS = 3000 # Print cost, generate samples, save model checkpoint every N iterations.
-STOP_ITERS = 10000 # Stop after this many iterations
+# PRINT_ITERS = 3000 # Print cost, generate samples, save model checkpoint every N iterations.
+# STOP_ITERS = 10000 # Stop after this many iterations
+PRINT_ITERS = 50 # Print cost, generate samples, save model checkpoint every N iterations.
+STOP_ITERS = 100 # Stop after this many iterations
+if RESUME: STOP_ITERS += 50
 
 PRINT_TIME = 72*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
 STOP_TIME = 60*60*24*2 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
@@ -668,6 +672,7 @@ grads = [T.clip(g, lib.floatX(-GRAD_CLIP), lib.floatX(GRAD_CLIP)) for g in grads
 # other_updates = lasagne.updates.adam(other_grads, other_params)
 updates = lasagne.updates.adam(grads, all_params)
 
+
 print('----got to fn---')
 # Training function(s)
 train_fn = theano.function(
@@ -683,6 +688,7 @@ train_fn = theano.function(
 #     on_unused_input='warn',
 #     mode='DebugMode'
 # )
+
 
 # Validation and Test function, hence no updates
 test_fn = theano.function(
@@ -872,6 +878,8 @@ new_lowest_cost = False
 end_of_batch = False
 epoch = 0
 
+cost_log_list = []
+
 h0_1 = numpy.zeros((BATCH_SIZE, N_RNN_LIST[1], H0_MULT*DIM), dtype='float32')
 h0_2 = numpy.zeros((BATCH_SIZE, N_RNN_LIST[2], H0_MULT*DIM), dtype='float32')
 big_h0 = numpy.zeros((BATCH_SIZE, N_RNN_LIST[0], H0_MULT*BIG_DIM), dtype='float32')
@@ -905,6 +913,21 @@ if RESUME:
 
     lib.load_params(res_path)
     print "Parameters from last available checkpoint loaded."
+    
+    #v0
+    # # path = os.path.join(PARAMS_PATH, 'updates_%s.npy'%(100))
+    # # all_values_loaded = np.load(path)
+    # # for u, v in zip(updates, all_values_loaded):
+    # #     u.set_value(v)
+    #v1
+    # dirFile = res_path.replace('params_', 'updates_').replace('pkl','npy')
+    # lib.load_updates(dirFile,updates)
+    # dirFile = os.path.join(PARAMS_PATH, 'costs.pkl')
+    # cost_log_list = lib.load_costs(dirFile)
+    
+    lib.load_updates(res_path,updates)
+    cost_log_list = lib.load_costs(PARAMS_PATH)
+    print "Updates from last available checkpoint loaded."
 
 FLAG_DEBUG_SAMPLE = False
 if FLAG_DEBUG_SAMPLE:
@@ -943,6 +966,7 @@ while True:
     #print "This cost:", cost, "This h0.mean()", h0.mean()
 
     costs.append(cost)
+    cost_log_list.append(cost)
 
     # Monitoring step
     if (TRAIN_MODE=='iters' and total_iters-last_print_iters == PRINT_ITERS) or \
@@ -1005,6 +1029,21 @@ while True:
                 os.path.join(PARAMS_PATH, 'params_{}.pkl'.format(tag))
         )
         print "Done!"
+        #save updates
+        print 'saving updates, costs'
+        lib.save_updates(PARAMS_PATH,tag, updates)
+        lib.save_costs(PARAMS_PATH,cost_log_list)
+        #v0
+        # all_values = [item.get_value() for item in updates]
+        # path = os.path.join(PARAMS_PATH, 'updates_%s'%(total_iters))
+        # np.save(path, all_values, allow_pickle=True )
+        # path = os.path.join(PARAMS_PATH, 'costs_%s'%(total_iters))
+        # np.save(path, cost_log_list, allow_pickle=True )
+        #v1
+        # lib.save_updates(os.path.join(PARAMS_PATH, 'updates_{}'.format(tag)), updates)
+        # lib.save_costs(os.path.join(PARAMS_PATH, 'costs.pkl'),cost_log_list)        
+        print 'complete!'
+
 
         # 4. Save and graph training progress (fast)
         training_info = {epoch_str : epoch,
