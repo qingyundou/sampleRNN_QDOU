@@ -132,6 +132,9 @@ def get_args():
             required=False, default=False, action='store_true')
     parser.add_argument('--grid', help='use data on air',\
             required=False, default=False, action='store_true')
+    
+    parser.add_argument('--frame_size_dnn', help='How many previous samples per setp for DNN',\
+            type=check_positive, required=False, default=0)
 
     args = parser.parse_args()
 
@@ -168,6 +171,9 @@ SKIP_CONN = args.skip_conn
 DIM = args.dim # Model dimensionality.
 BIG_DIM = DIM # Dimensionality for the slowest level.
 N_RNN = args.n_rnn # How many RNNs to stack in the frame-level model
+
+FRAME_SIZE_DNN = args.frame_size_dnn # How many previous samples per setp for DNN
+if FRAME_SIZE_DNN==0: FRAME_SIZE_DNN = FRAME_SIZE
 
 if args.n_big_rnn==0:
     N_BIG_RNN = N_RNN # how many RNNs to stack in the big-frame-level model
@@ -207,17 +213,25 @@ BITRATE = 16000
 
 # Other constants
 #TRAIN_MODE = 'iters' # To use PRINT_ITERS and STOP_ITERS
-TRAIN_MODE = 'time' # To use PRINT_TIME and STOP_TIME
-#TRAIN_MODE = 'time-iters'
+# TRAIN_MODE = 'time' # To use PRINT_TIME and STOP_TIME
+# TRAIN_MODE = 'time-iters'
 # To use PRINT_TIME for validation,
 # and (STOP_ITERS, STOP_TIME), whichever happened first, for stopping exp.
-#TRAIN_MODE = 'iters-time'
+TRAIN_MODE = 'iters-time'
 # To use PRINT_ITERS for validation,
 # and (STOP_ITERS, STOP_TIME), whichever happened first, for stopping exp.
-PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every N iterations.
-STOP_ITERS = 100000 # Stop after this many iterations
+# PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every N iterations.
+# STOP_ITERS = 100000 # Stop after this many iterations
+
+# PRINT_ITERS = 3200 # Print cost, generate samples, save model checkpoint every N iterations.
+# STOP_ITERS = 64000 # Stop after this many iterations
+
+PRINT_ITERS = 32000000 # Print cost, generate samples, save model checkpoint every N iterations.
+STOP_ITERS = 64009 # Stop after this many iterations
+
+
 PRINT_TIME = 72*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
-STOP_TIME = 60*60*24*3 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
+STOP_TIME = 60*60*24*2 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
 N_SEQS = 5  # Number of samples to generate every time monitoring.
 ###
 RESULTS_DIR = 'results_3t'
@@ -452,13 +466,13 @@ def frame_level_rnn(input_sequences, other_input, h0, reset):
 def sample_level_predictor(frame_level_outputs, prev_samples):
     """
     frame_level_outputs.shape: (batch size, DIM) -> (BATCH_SIZE * SEQ_LEN, DIM)
-    prev_samples.shape:        (batch size, FRAME_SIZE) -> (BATCH_SIZE * SEQ_LEN, FRAME_SIZE)
+    prev_samples.shape:        (batch size, FRAME_SIZE) -> (BATCH_SIZE * SEQ_LEN, FRAME_SIZE_DNN)
     output.shape:              (batch size, Q_LEVELS)
     """
     # Handling EMB_SIZE
     if EMB_SIZE == 0:  # no support for one-hot in three_tier and one_tier.
         prev_samples = lib.ops.T_one_hot(prev_samples, Q_LEVELS)
-        # (BATCH_SIZE*N_FRAMES*FRAME_SIZE, FRAME_SIZE, Q_LEVELS)
+        # (BATCH_SIZE*N_FRAMES*FRAME_SIZE, FRAME_SIZE_DNN, Q_LEVELS)
         last_out_shape = Q_LEVELS
     elif EMB_SIZE > 0:
         prev_samples = lib.ops.Embedding(
@@ -466,16 +480,16 @@ def sample_level_predictor(frame_level_outputs, prev_samples):
             Q_LEVELS,
             EMB_SIZE,
             prev_samples)
-        # (BATCH_SIZE*N_FRAMES*FRAME_SIZE, FRAME_SIZE, EMB_SIZE), f32
+        # (BATCH_SIZE*N_FRAMES*FRAME_SIZE, FRAME_SIZE_DNN, EMB_SIZE), f32
         last_out_shape = EMB_SIZE
     else:
         raise ValueError('EMB_SIZE cannot be negative.')
 
-    prev_samples = prev_samples.reshape((-1, FRAME_SIZE * last_out_shape))
+    prev_samples = prev_samples.reshape((-1, FRAME_SIZE_DNN * last_out_shape))
 
     out = lib.ops.Linear(
         'SampleLevel.L1_PrevSamples',
-        FRAME_SIZE * last_out_shape,
+        FRAME_SIZE_DNN * last_out_shape,
         DIM,
         prev_samples,
         biases=False,
@@ -538,10 +552,10 @@ big_frame_level_outputs, new_big_h0, big_frame_independent_preds = big_frame_lev
 
 frame_level_outputs, new_h0 = frame_level_rnn(input_sequences, big_frame_level_outputs, h0, reset)
 
-prev_samples = sequences[:, BIG_FRAME_SIZE-FRAME_SIZE:-1]
+prev_samples = sequences[:, BIG_FRAME_SIZE-FRAME_SIZE_DNN:-1]
 prev_samples = prev_samples.reshape((1, BATCH_SIZE, 1, -1))
-prev_samples = T.nnet.neighbours.images2neibs(prev_samples, (1, FRAME_SIZE), neib_step=(1, 1), mode='valid')
-prev_samples = prev_samples.reshape((BATCH_SIZE * SEQ_LEN, FRAME_SIZE))
+prev_samples = T.nnet.neighbours.images2neibs(prev_samples, (1, FRAME_SIZE_DNN), neib_step=(1, 1), mode='valid')
+prev_samples = prev_samples.reshape((BATCH_SIZE * SEQ_LEN, FRAME_SIZE_DNN))
 
 sample_level_outputs = sample_level_predictor(
     frame_level_outputs.reshape((BATCH_SIZE * SEQ_LEN, DIM)),
@@ -762,7 +776,7 @@ def generate_and_save_samples(tag):
 
         samples[:, t] = sample_level_generate_fn(
             frame_level_outputs[:, t % FRAME_SIZE],
-            samples[:, t-FRAME_SIZE:t]
+            samples[:, t-FRAME_SIZE_DNN:t]
         )
 
     total_time = time() - total_time
