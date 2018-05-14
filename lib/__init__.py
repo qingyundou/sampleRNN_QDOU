@@ -27,6 +27,8 @@ import matplotlib.pyplot as plt
 locale.setlocale(locale.LC_ALL, '')
 # 'en_US.UTF-8'
 
+import pdb
+
 _params = {}
 def param(name, *args, **kwargs):
     """
@@ -107,6 +109,39 @@ def load_params(path):
         param_vals = pickle.load(f)
     for name, val in param_vals.iteritems():
         _params[name].set_value(val)
+        
+def build_params_up(dirFile_3t):
+    with open(dirFile_3t, 'rb') as f:
+        param_vals = pickle.load(f)
+    for name, val in param_vals.iteritems():
+        if name.replace('FrameLevel','FrameLevel_2') in _params:
+            name_new = name.replace('FrameLevel','FrameLevel_2')
+            # print name_new 
+            _params[name_new].set_value(val)
+            # pdb.set_trace()
+        elif name.replace('BigFrameLevel','FrameLevel_1') in _params:
+            name_new = name.replace('BigFrameLevel','FrameLevel_1')
+            # print 'attention: ',name_new
+            # if val.shape == _params[name_new].shape.eval():
+            if 'FrameLevel_1.GRU1.Step.Input.W0' not in name_new and 'IndependentPreds' not in name_new:
+                # print 'val shape ok'
+                _params[name_new].set_value(val)
+    return
+def build_params_low(dirFile_3t):
+    with open(dirFile_3t, 'rb') as f:
+        param_vals = pickle.load(f)
+    for name, val in param_vals.iteritems():
+        name_new = name.replace('FrameLevel','FrameLevel_1')
+        if name in _params:
+            # print name
+            _params[name].set_value(val)
+        elif name_new in _params:
+            # print 'new: ',name_new
+            # if val.shape == _params[name_new].shape.eval():
+            if 'FrameLevel_1.Output' not in name_new:
+                # print 'val shape ok'
+                _params[name_new].set_value(val)
+    return
 
 #v1 HIGHEST_PROTOCOL
 # def save_params(path):

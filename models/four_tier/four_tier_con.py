@@ -146,18 +146,26 @@ def get_args():
             type=float, required=False, default='0.001')
     parser.add_argument('--uc', help='uc starting point',
             type=str, required=False, default='flat_start')
+    
+    parser.add_argument('--lt', help='lower tier model starting point',
+            type=str, required=False, default='flat_start')
+    parser.add_argument('--tt', help='tier-level training',\
+            choices=['UP', 'LOW'], required=False)
+    
+    parser.add_argument('--acoustic', help='use acoustic features',required=False, default=False, action='store_true')
+
 
     args = parser.parse_args()
 
     # NEW
     # Create tag for this experiment based on passed args
-    tag_list = [t for t in sys.argv if ('--uc') not in t and '.pkl' not in t]
+    tag_list = [t for t in sys.argv if '--uc' not in t and '--lt' not in t and '.pkl' not in t]
     tag = reduce(lambda a, b: a+b, tag_list).replace('--resume', '').replace('/', '-').replace('--', '-').replace('True', 'T').replace('False', 'F')
     print "Created experiment tag for these args:"
     print tag
     
     #deal with pb - dir name too long
-    tag = tag.replace('-which_setSPEECH','').replace('size','sz').replace('frame','fr').replace('batch','bch').replace('-grid', '')
+    tag = tag.replace('-which_setSPEECH','').replace('size','sz').replace('frame','fr').replace('batch','bch').replace('-grid', '').replace('acousitc', 'ac').replace('-which_setLESLEY', '')
     
 
     return args, tag
@@ -220,7 +228,7 @@ if Q_TYPE == 'mu-law' and Q_LEVELS != 256:
     
 LEARNING_RATE = float(args.lr)
 UCINIT_DIRFILE = args.uc
-
+LTINIT_DIRFILE = args.lt
 
 ###set FLAGS for options
 flag_dict = {}
@@ -230,12 +238,20 @@ flag_dict['NORMED_UTT'] = args.utt
 flag_dict['GRID'] = args.grid
 flag_dict['QUANTLAB'] = args.quantlab
 flag_dict['WHICH_SET'] = args.which_set
+flag_dict['ACOUSTIC'] = args.acoustic
 
 FLAG_QUANTLAB = flag_dict['QUANTLAB']
 LAB_SIZE = 80 #one label covers 80 points on waveform
 LAB_PERIOD = float(0.005) #one label covers 0.005s ~ 200Hz
 LAB_DIM = 601
+if flag_dict['ACOUSTIC']: LAB_DIM = 85
 UP_RATE = LAB_SIZE/FRAME_SIZE_2
+
+FLAG_TIER_TRAIN_UP = args.tt=='UP'
+FLAG_TIER_TRAIN_LOW = args.tt=='LOW'
+# if FLAG_TIER_TRAIN_UP or FLAG_TIER_TRAIN_LOW: NB_TIER_TRAIN_ITER = 10
+if FLAG_TIER_TRAIN_UP or FLAG_TIER_TRAIN_LOW: NB_TIER_TRAIN_ITER = 6400*3
+else: NB_TIER_TRAIN_ITER = -1
 
 # Fixed hyperparams
 GRAD_CLIP = 1 # Elementwise grad clip threshold
@@ -243,18 +259,24 @@ BITRATE = 16000
 
 # Other constants
 #TRAIN_MODE = 'iters' # To use PRINT_ITERS and STOP_ITERS
-TRAIN_MODE = 'time' # To use PRINT_TIME and STOP_TIME
+# TRAIN_MODE = 'time' # To use PRINT_TIME and STOP_TIME
 #TRAIN_MODE = 'time-iters'
 # To use PRINT_TIME for validation,
 # and (STOP_ITERS, STOP_TIME), whichever happened first, for stopping exp.
-# TRAIN_MODE = 'iters-time'
+TRAIN_MODE = 'iters-time'
 # To use PRINT_ITERS for validation,
 # and (STOP_ITERS, STOP_TIME), whichever happened first, for stopping exp.
 # PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every N iterations.
 # STOP_ITERS = 100000 # Stop after this many iterations
-PRINT_ITERS = 50 # Print cost, generate samples, save model checkpoint every N iterations.
-STOP_ITERS = 100 # Stop after this many iterations
-if RESUME: STOP_ITERS += 50
+
+# #for debug
+# PRINT_ITERS = 10 # Print cost, generate samples, save model checkpoint every N iterations.
+# STOP_ITERS = 20 # Stop after this many iterations
+
+#for real
+PRINT_ITERS = 6400*40 # Print cost, generate samples, save model checkpoint every N iterations.
+STOP_ITERS = 6400*40 # Stop after this many iterations
+
 
 PRINT_TIME = 72*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
 STOP_TIME = 60*60*24*3 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
@@ -262,7 +284,7 @@ if not RESUME: STOP_TIME = 60*60*24*3.5
 N_SEQS = 5  # Number of samples to generate every time monitoring.
 ###
 RESULTS_DIR = 'results_4t'
-#if WHICH_SET != 'SPEECH': RESULTS_DIR += ('/'+WHICH_SET)
+if WHICH_SET != 'SPEECH': RESULTS_DIR += ('/'+WHICH_SET)
 #if WHICH_SET == 'SPEECH': RESULTS_DIR += ('/'+WHICH_SET)
 
 ###
@@ -310,11 +332,12 @@ if WHICH_SET == 'ONOM':
     from datasets.dataset import onom_train_feed_epoch as train_feeder
     from datasets.dataset import onom_valid_feed_epoch as valid_feeder
     from datasets.dataset import onom_test_feed_epoch  as test_feeder
-elif WHICH_SET == 'SPEECH':
+elif WHICH_SET == 'SPEECH' or 'LESLEY':
     from datasets.dataset_con import speech_train_feed_epoch as train_feeder
     from datasets.dataset_con import speech_valid_feed_epoch as valid_feeder
     from datasets.dataset_con import speech_test_feed_epoch  as test_feeder
     
+# pdb.set_trace()
     
 def get_lab_big(seqs_lab,fr_sz=BIG_FRAME_SIZE):
     seqs_lab_big = seqs_lab[:,::fr_sz/FRAME_SIZE_2,:]
@@ -609,7 +632,7 @@ else:
 if args.debug:
     # Solely for debugging purposes.
     # Maybe I should set the compute_test_value=warn from here.
-    # theano.config.compute_test_value = 'warn'
+    theano.config.compute_test_value = 'warn'
     sequences.tag.test_value = numpy.zeros((BATCH_SIZE, SEQ_LEN+OVERLAP), dtype='int32')
     h0_1.tag.test_value = numpy.zeros((BATCH_SIZE, N_RNN_LIST[1], H0_MULT*DIM), dtype='float32')
     h0_2.tag.test_value = numpy.zeros((BATCH_SIZE, N_RNN_LIST[2], H0_MULT*DIM), dtype='float32')
@@ -694,22 +717,40 @@ ip_params = lib.get_params(ip_cost, lambda x: hasattr(x, 'param') and x.param==T
     and 'BigFrameLevel' in x.name)
 other_params = [p for p in all_params if p not in ip_params]
 all_params = ip_params + other_params
+
+lower_params = lib.get_params(cost, lambda x: hasattr(x, 'param') and x.param==True\
+    and ('FrameLevel_2' in x.name or 'SampleLevel' in x.name))
+lower_params += lib.get_params(cost, lambda x: hasattr(x, 'param') and x.param==True\
+    and 'FrameLevel_1.Output' in x.name)
+# pdb.set_trace()
+upper_params = lib.get_params(cost, lambda x: hasattr(x, 'param') and x.param==True\
+    and 'BigFrameLevel' in x.name)
+upper_params += lib.get_params(cost, lambda x: hasattr(x, 'param') and x.param==True\
+    and ('FrameLevel_1.InputExpand' in x.name or 'FrameLevel_1.GRU1.Step.Input.W0' in x.name))
+
+
 # lib.print_params_info(ip_params, path=FOLDER_PREFIX)
-# lib.print_params_info(other_params, path=FOLDER_PREFIX)
+lib.print_params_info(upper_params, path=FOLDER_PREFIX)
+lib.print_params_info(lower_params, path=FOLDER_PREFIX)
 lib.print_params_info(all_params, path=FOLDER_PREFIX)
+
 
 # ip_grads = T.grad(ip_cost, wrt=ip_params, disconnected_inputs='warn')
 # ip_grads = [T.clip(g, lib.floatX(-GRAD_CLIP), lib.floatX(GRAD_CLIP)) for g in ip_grads]
 
-# other_grads = T.grad(cost, wrt=other_params, disconnected_inputs='warn')
-# other_grads = [T.clip(g, lib.floatX(-GRAD_CLIP), lib.floatX(GRAD_CLIP)) for g in other_grads]
+upper_grads = T.grad(cost, wrt=upper_params, disconnected_inputs='warn')
+upper_grads = [T.clip(g, lib.floatX(-GRAD_CLIP), lib.floatX(GRAD_CLIP)) for g in upper_grads]
+
+lower_grads = T.grad(cost, wrt=lower_params, disconnected_inputs='warn')
+lower_grads = [T.clip(g, lib.floatX(-GRAD_CLIP), lib.floatX(GRAD_CLIP)) for g in lower_grads]
 
 grads = T.grad(cost, wrt=all_params, disconnected_inputs='warn')
 grads = [T.clip(g, lib.floatX(-GRAD_CLIP), lib.floatX(GRAD_CLIP)) for g in grads]
 
 
 # ip_updates = lasagne.updates.adam(ip_grads, ip_params)
-# other_updates = lasagne.updates.adam(other_grads, other_params)
+upper_updates = lasagne.updates.adam(upper_grads, upper_params)
+lower_updates = lasagne.updates.adam(lower_grads, lower_params)
 updates = lasagne.updates.adam(grads, all_params)
 
 print('----got to fn---')
@@ -718,6 +759,20 @@ train_fn = theano.function(
     [sequences, sequences_lab_big, sequences_lab_1, sequences_lab_2, big_h0, h0_1, h0_2, reset, mask],
     [cost, new_big_h0, new_h0_1, new_h0_2],
     updates=updates,
+    on_unused_input='warn'
+)
+
+upper_train_fn = theano.function(
+    [sequences, sequences_lab_big, sequences_lab_1, sequences_lab_2, big_h0, h0_1, h0_2, reset, mask],
+    [cost, new_big_h0, new_h0_1, new_h0_2],
+    updates=upper_updates,
+    on_unused_input='warn'
+)
+
+lower_train_fn = theano.function(
+    [sequences, sequences_lab_big, sequences_lab_1, sequences_lab_2, big_h0, h0_1, h0_2, reset, mask],
+    [cost, new_big_h0, new_h0_1, new_h0_2],
+    updates=lower_updates,
     on_unused_input='warn'
 )
 
@@ -933,13 +988,23 @@ big_h0 = numpy.zeros((BATCH_SIZE, N_RNN_LIST[0], H0_MULT*BIG_DIM), dtype='float3
 tr_feeder = load_data(train_feeder)
 
 ### start from uncon
-if UCINIT_DIRFILE == 'flat_start': FLAG_UCINIT = False
-else: FLAG_UCINIT = True
-if (FLAG_UCINIT and not RESUME):
+if (UCINIT_DIRFILE != 'flat_start' and not RESUME):
     print('---loading uncon_para_expand_4t.pkl---')
-    uncon_para_expand_path = UCINIT_DIRFILE
-    lib.load_params(uncon_para_expand_path)
+    lib.load_params(UCINIT_DIRFILE)
     print('---loading complete---')
+    
+### start from lower tier model
+if (LTINIT_DIRFILE != 'flat_start' and not RESUME):
+    # lib.save_params(os.path.join(PARAMS_PATH, 'params_rdm.pkl')) #debug
+    if FLAG_TIER_TRAIN_UP:
+        print('---building on top of para_3t.pkl---')
+        lib.build_params_up(LTINIT_DIRFILE)
+        print('---building complete---')
+    if FLAG_TIER_TRAIN_LOW:
+        print('---building at bottom of para_3t.pkl---')
+        lib.build_params_low(LTINIT_DIRFILE)
+        print('---building complete---')
+    # lib.save_params(os.path.join(PARAMS_PATH, 'params_blt.pkl'))
 
 ### Handling the resume option:
 if RESUME:
@@ -1012,7 +1077,15 @@ while True:
     #pdb.set_trace()
 
     start_time = time()
-    cost, big_h0, h0_1, h0_2 = train_fn(seqs, seqs_lab_big, seqs_lab_1, seqs_lab_2, big_h0, h0_1, h0_2, reset, mask)
+    if total_iters > NB_TIER_TRAIN_ITER:
+        cost, big_h0, h0_1, h0_2 = train_fn(seqs, seqs_lab_big, seqs_lab_1, seqs_lab_2, big_h0, h0_1, h0_2, reset, mask)
+    elif FLAG_TIER_TRAIN_UP:
+        cost, big_h0, h0_1, h0_2 = upper_train_fn(seqs, seqs_lab_big, seqs_lab_1, seqs_lab_2, big_h0, h0_1, h0_2, reset, mask)
+    elif FLAG_TIER_TRAIN_LOW:
+        cost, big_h0, h0_1, h0_2 = lower_train_fn(seqs, seqs_lab_big, seqs_lab_1, seqs_lab_2, big_h0, h0_1, h0_2, reset, mask)
+    else:
+        print 'train_fn not run!!!'
+        
     total_time += time() - start_time
     #print "This cost:", cost, "This h0.mean()", h0.mean()
 
