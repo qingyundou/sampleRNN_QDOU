@@ -54,7 +54,8 @@ else:
         #__speech_file = 'speech/MA_f32_CE_8s_rpt3/speech_{}.npy'
         __speech_file = 'speech/manuAlign_float32_cutEnd/speech_{}.npy'  # in float16 8secs*16000samples/sec
     if WHICH_SET == 'LESLEY':
-        __speech_file = 'speech/16k_resil_Lesley/speech_{}.npy'  # lesley data
+        # __speech_file = 'speech/16k_resil_Lesley/speech_{}.npy'  # lesley data, changed dir, should be replaced by the following line
+        __speech_file = 'speech/16k_resil_Lesley_full/speech_{}.npy'  # lesley data
     
 __blizz_train_mean_std = np.array([0.0008558356760380169,
                                    0.098437514304141299],

@@ -13,6 +13,8 @@ import time
 import os
 import glob
 
+import pdb
+
 import scipy.interpolate
 axisIndex = 1
 LAB_PERIOD = 0.005
@@ -29,6 +31,7 @@ except ImportError:
     flag_dict['NORMED_ALRDY'] = True
     flag_dict['GRID'] = False
     flag_dict['WHICH_SET'] = 'SPEECH'
+    flag_dict['ACOUSTIC'] = False
 # else:
 #     print "Non-ImportError: cannot import name flag_dict"
 
@@ -78,12 +81,20 @@ else:
         # __speech_file = 'speech/MA_f32_CE_5s/speech_{}.npy'
         # __speech_file_lab = 'speech/lab_norm_01_train_5s/speech_{}_lab.npy'  # in float16 5secs*16000samples/sec
     if WHICH_SET == 'LESLEY':
-        __speech_file = 'speech/16k_resil_Lesley/speech_{}.npy'  # lesley data
+        # __speech_file = 'speech/16k_resil_Lesley/speech_{}.npy'  # lesley data, changed dir, should be replaced by the following line
+        __speech_file = 'speech/16k_resil_Lesley_full/speech_{}.npy'  # lesley data
         __speech_file_lab = 'speech/ln_16k_resil_Lesley_lab_norm/speech_{}_lab.npy'  # lesley data
+        if flag_dict['ACOUSTIC']:
+            # __speech_file = 'speech/16k_resil_Lesley/speech_{}.npy'
+            # __speech_file_lab = 'speech/BLSTM_resil_Lesley_traj/speech_{}_traj.npy'  # lesley data
+            __speech_file = 'speech/16k_resil_Lesley_full/speech_{}.npy'
+            __speech_file_lab = 'speech/BLSTM_resil_Lesley_traj_full/speech_{}_traj.npy'  # lesley data
 
 print 'dir for wav and lab:'
 print __speech_file
 print __speech_file_lab
+
+# pdb.set_trace()
 
 __blizz_train_mean_std = np.array([0.0008558356760380169,
                                    0.098437514304141299],

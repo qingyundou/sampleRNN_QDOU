@@ -146,6 +146,9 @@ def get_args():
     
     parser.add_argument('--uc', help='uc starting point',
             type=str, required=False, default='flat_start')
+    
+    parser.add_argument('--acoustic', help='use acoustic features',
+            required=False, default=False, action='store_true')
 
     args = parser.parse_args()
 
@@ -221,6 +224,7 @@ flag_dict['NORMED_ALRDY'] = args.normed
 flag_dict['GRID'] = args.grid
 flag_dict['QUANTLAB'] = args.quantlab
 flag_dict['WHICH_SET'] = args.which_set
+flag_dict['ACOUSTIC'] = args.acoustic
 
 FLAG_QUANTLAB = flag_dict['QUANTLAB']
 
@@ -251,6 +255,7 @@ Q_ZERO = numpy.int32(Q_LEVELS//2) # Discrete value correponding to zero amplitud
 LAB_SIZE = 80 #one label covers 80 points on waveform
 LAB_PERIOD = float(0.005) #one label covers 0.005s ~ 200Hz
 LAB_DIM = 601
+if flag_dict['ACOUSTIC']: LAB_DIM = 85
 UP_RATE = LAB_SIZE/FRAME_SIZE
 
 epoch_str = 'epoch'

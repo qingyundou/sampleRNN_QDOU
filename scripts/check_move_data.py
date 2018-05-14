@@ -27,6 +27,14 @@ tgt_all_dataset_list = os.listdir(tgt_all_dataset_dir)
 #1.2 if not already there, make dir and move data
 #loop over src, if not found in tgt, copy
 for dataset in src_all_dataset_list:
+    if dataset=='16k_resil_Lesley':
+        t = os.path.join(tgt_all_dataset_dir,dataset)
+        cmd = 'rm -r {}'.format(t)
+        print('cleaning Lesley with cmd: '+cmd)
+        output,err = runCMD(cmd)
+        print('output: '+str(output))
+        print('err: '+str(err))
+        print('cleaning complete!')
     if dataset not in tgt_all_dataset_list:
         s = os.path.join(src_all_dataset_dir,dataset)
         t = os.path.join(tgt_all_dataset_dir,dataset)
