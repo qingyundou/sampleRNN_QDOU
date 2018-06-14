@@ -115,8 +115,7 @@ def get_args():
             choices=['linear', 'a-law', 'mu-law'], required=True)
     parser.add_argument('--which_set', help='ONOM, BLIZZ, MUSIC, or HUCK, or SPEECH',
             choices=['ONOM', 'BLIZZ', 'MUSIC', 'HUCK', 'SPEECH', 'LESLEY'], required=True)
-    parser.add_argument('--batch_size', help='size of mini-batch',
-            type=check_positive, choices=[1, 20, 64, 80, 128, 256], required=True)
+    parser.add_argument('--batch_size', help='size of mini-batch',type=int, required=True)
 
     parser.add_argument('--debug', help='Debug mode', required=False, default=False, action='store_true')
     parser.add_argument('--resume', help='Resume the same model from the last\
@@ -129,6 +128,8 @@ def get_args():
     parser.add_argument('--rmzero', help='remove q_zero, start from real data',\
             required=False, default=False, action='store_true')
     parser.add_argument('--normed', help='normalize data on corpus level',\
+            required=False, default=False, action='store_true')
+    parser.add_argument('--utt', help='normalize data on utt level',\
             required=False, default=False, action='store_true')
     parser.add_argument('--grid', help='use data on air',\
             required=False, default=False, action='store_true')
@@ -203,6 +204,7 @@ if Q_TYPE == 'mu-law' and Q_LEVELS != 256:
 flag_dict = {}
 flag_dict['RMZERO'] = args.rmzero
 flag_dict['NORMED_ALRDY'] = args.normed
+flag_dict['NORMED_UTT'] = args.utt
 flag_dict['GRID'] = args.grid
 flag_dict['WHICH_SET'] = args.which_set
 

@@ -118,8 +118,7 @@ def get_args():
             choices=['linear', 'a-law', 'mu-law'], required=True)
     parser.add_argument('--which_set', help='ONOM, BLIZZ, MUSIC, or HUCK, or SPEECH',
             choices=['ONOM', 'BLIZZ', 'MUSIC', 'HUCK', 'SPEECH', 'LESLEY'], required=True)
-    parser.add_argument('--batch_size', help='size of mini-batch',
-            type=check_positive, choices=[1, 20, 64, 80, 128, 256], required=True)
+    parser.add_argument('--batch_size', help='size of mini-batch',type=int, required=True)
 
     parser.add_argument('--debug', help='Debug mode', required=False, default=False, action='store_true')
     parser.add_argument('--resume', help='Resume the same model from the last\
@@ -135,6 +134,8 @@ def get_args():
             required=False, default=False, action='store_true')
     parser.add_argument('--normed', help='normalize data on corpus level',\
             required=False, default=False, action='store_true')
+    parser.add_argument('--utt', help='normalize data on utt level',\
+            required=False, default=False, action='store_true')
     parser.add_argument('--grid', help='use data on air',\
             required=False, default=False, action='store_true')
     
@@ -149,6 +150,7 @@ def get_args():
     
     parser.add_argument('--acoustic', help='use acoustic features',
             required=False, default=False, action='store_true')
+    parser.add_argument('--gen', help='pkl for strict synthesis',type=str, required=False, default='not_gen')
 
     args = parser.parse_args()
 
@@ -216,15 +218,20 @@ if Q_TYPE == 'mu-law' and Q_LEVELS != 256:
     
 LEARNING_RATE = float(args.lr)
 UCINIT_DIRFILE = args.uc
+
+GEN_DIRFILE = args.gen
+FLAG_GEN = (GEN_DIRFILE!='not_gen')
     
 ###set FLAGS for options
 flag_dict = {}
 flag_dict['RMZERO'] = args.rmzero
 flag_dict['NORMED_ALRDY'] = args.normed
+flag_dict['NORMED_UTT'] = args.utt
 flag_dict['GRID'] = args.grid
 flag_dict['QUANTLAB'] = args.quantlab
 flag_dict['WHICH_SET'] = args.which_set
 flag_dict['ACOUSTIC'] = args.acoustic
+flag_dict['GEN'] = FLAG_GEN
 
 FLAG_QUANTLAB = flag_dict['QUANTLAB']
 
@@ -255,7 +262,9 @@ Q_ZERO = numpy.int32(Q_LEVELS//2) # Discrete value correponding to zero amplitud
 LAB_SIZE = 80 #one label covers 80 points on waveform
 LAB_PERIOD = float(0.005) #one label covers 0.005s ~ 200Hz
 LAB_DIM = 601
-if flag_dict['ACOUSTIC']: LAB_DIM = 85
+if flag_dict['ACOUSTIC']:
+    if WHICH_SET=='SPEECH': LAB_DIM = 163
+    elif WHICH_SET=='LESLEY': LAB_DIM = 85
 UP_RATE = LAB_SIZE/FRAME_SIZE
 
 epoch_str = 'epoch'
