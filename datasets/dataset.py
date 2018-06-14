@@ -68,8 +68,8 @@ __speech_train_mean_std = np.array([6.6694896289095623e-07,
                                    0.042258811348676345],
                                    dtype='float64')
 
-print 'dir for wav:'
-print __speech_file
+# print 'dir for wav:'
+# print __speech_file
 
 # TODO:
 #__huck_train_mean_std = ...

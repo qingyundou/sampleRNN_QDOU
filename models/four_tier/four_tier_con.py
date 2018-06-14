@@ -43,11 +43,13 @@ import theano.ifelse
 import lasagne
 import scipy.io.wavfile
 
+import theano.tensor.nnet.neighbours
+
 import lib
 
 import pdb
 
-LEARNING_RATE = 0.001
+# LEARNING_RATE = 0.001
 
 ### Parsing passed args/hyperparameters ###
 def get_args():
@@ -115,8 +117,9 @@ def get_args():
             choices=['linear', 'a-law', 'mu-law'], required=True)
     parser.add_argument('--which_set', help='ONOM, BLIZZ, MUSIC, or HUCK, or SPEECH',
             choices=['ONOM', 'BLIZZ', 'MUSIC', 'HUCK', 'SPEECH', 'LESLEY'], required=True)
-    parser.add_argument('--batch_size', help='size of mini-batch',
-            type=check_positive, choices=[1, 20, 64, 80, 128, 256], required=True)
+    # parser.add_argument('--batch_size', help='size of mini-batch',
+    #         type=check_positive, choices=[1,5, 20, 64, 80, 128, 256], required=True)
+    parser.add_argument('--batch_size', help='size of mini-batch',type=int, required=True)
 
     parser.add_argument('--debug', help='Debug mode', required=False, default=False, action='store_true')
     parser.add_argument('--resume', help='Resume the same model from the last\
@@ -153,6 +156,7 @@ def get_args():
             choices=['UP', 'LOW'], required=False)
     
     parser.add_argument('--acoustic', help='use acoustic features',required=False, default=False, action='store_true')
+    parser.add_argument('--gen', help='pkl for strict synthesis',type=str, required=False, default='not_gen')
 
 
     args = parser.parse_args()
@@ -230,6 +234,9 @@ LEARNING_RATE = float(args.lr)
 UCINIT_DIRFILE = args.uc
 LTINIT_DIRFILE = args.lt
 
+GEN_DIRFILE = args.gen
+FLAG_GEN = (GEN_DIRFILE!='not_gen')
+
 ###set FLAGS for options
 flag_dict = {}
 flag_dict['RMZERO'] = args.rmzero
@@ -239,12 +246,15 @@ flag_dict['GRID'] = args.grid
 flag_dict['QUANTLAB'] = args.quantlab
 flag_dict['WHICH_SET'] = args.which_set
 flag_dict['ACOUSTIC'] = args.acoustic
+flag_dict['GEN'] = FLAG_GEN
 
 FLAG_QUANTLAB = flag_dict['QUANTLAB']
 LAB_SIZE = 80 #one label covers 80 points on waveform
 LAB_PERIOD = float(0.005) #one label covers 0.005s ~ 200Hz
 LAB_DIM = 601
-if flag_dict['ACOUSTIC']: LAB_DIM = 85
+if flag_dict['ACOUSTIC']:
+    if WHICH_SET=='SPEECH': LAB_DIM = 163
+    elif WHICH_SET=='LESLEY': LAB_DIM = 85
 UP_RATE = LAB_SIZE/FRAME_SIZE_2
 
 FLAG_TIER_TRAIN_UP = args.tt=='UP'
@@ -278,14 +288,24 @@ PRINT_ITERS = 6400*40 # Print cost, generate samples, save model checkpoint ever
 STOP_ITERS = 6400*40 # Stop after this many iterations
 
 
-PRINT_TIME = 72*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
+PRINT_TIME = 60*60*24*5 # Print cost, generate samples, save model checkpoint every N seconds.
 STOP_TIME = 60*60*24*3 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
 if not RESUME: STOP_TIME = 60*60*24*3.5
 N_SEQS = 5  # Number of samples to generate every time monitoring.
+N_SECS = 5
+
+if FLAG_GEN:
+    # N_SEQS = 10
+    # N_SECS = 8 #LENGTH = 8*BITRATE #640*80
+    N_SEQS = 72 #60
+    # N_SECS = 8 #LENGTH = 8*BITRATE #640*80
+    
 ###
 RESULTS_DIR = 'results_4t'
 if WHICH_SET != 'SPEECH': RESULTS_DIR += ('/'+WHICH_SET)
 #if WHICH_SET == 'SPEECH': RESULTS_DIR += ('/'+WHICH_SET)
+
+if FLAG_GEN: RESULTS_DIR = os.path.join(RESULTS_DIR,'gen')
 
 ###
 FOLDER_PREFIX = os.path.join(RESULTS_DIR, tag)
@@ -632,7 +652,7 @@ else:
 if args.debug:
     # Solely for debugging purposes.
     # Maybe I should set the compute_test_value=warn from here.
-    theano.config.compute_test_value = 'warn'
+    # theano.config.compute_test_value = 'warn'
     sequences.tag.test_value = numpy.zeros((BATCH_SIZE, SEQ_LEN+OVERLAP), dtype='int32')
     h0_1.tag.test_value = numpy.zeros((BATCH_SIZE, N_RNN_LIST[1], H0_MULT*DIM), dtype='float32')
     h0_2.tag.test_value = numpy.zeros((BATCH_SIZE, N_RNN_LIST[2], H0_MULT*DIM), dtype='float32')
@@ -660,6 +680,7 @@ frame_level_outputs_2, new_h0_2 = frame_level_rnn(input_sequences_2, sequences_l
 prev_samples = sequences[:, BIG_FRAME_SIZE-FRAME_SIZE_DNN:-1]
 prev_samples = prev_samples.reshape((1, BATCH_SIZE, 1, -1))
 prev_samples = T.nnet.neighbours.images2neibs(prev_samples, (1, FRAME_SIZE_DNN), neib_step=(1, 1), mode='valid')
+# prev_samples = theano.tensor.nnet.neighbours.images2neibs(prev_samples, (1, FRAME_SIZE_DNN), neib_step=(1, 1), mode='valid')
 prev_samples = prev_samples.reshape((BATCH_SIZE * SEQ_LEN, FRAME_SIZE_DNN))
 
 
@@ -749,9 +770,9 @@ grads = [T.clip(g, lib.floatX(-GRAD_CLIP), lib.floatX(GRAD_CLIP)) for g in grads
 
 
 # ip_updates = lasagne.updates.adam(ip_grads, ip_params)
-upper_updates = lasagne.updates.adam(upper_grads, upper_params)
-lower_updates = lasagne.updates.adam(lower_grads, lower_params)
-updates = lasagne.updates.adam(grads, all_params)
+upper_updates = lasagne.updates.adam(upper_grads, upper_params, learning_rate=LEARNING_RATE)
+lower_updates = lasagne.updates.adam(lower_grads, lower_params, learning_rate=LEARNING_RATE)
+updates = lasagne.updates.adam(grads, all_params, learning_rate=LEARNING_RATE)
 
 print('----got to fn---')
 # Training function(s)
@@ -822,6 +843,8 @@ sample_level_generate_fn = theano.function(
 # to study the behaviour of the model and also to introduce some diversity
 # to samples in a simple way. [it's disabled]
 
+
+
 FLAG_USETRAIN_WHENTEST = False
 def generate_and_save_samples(tag):
     def write_audio_file(name, data):
@@ -840,9 +863,9 @@ def generate_and_save_samples(tag):
 
     total_time = time()
     # Generate N_SEQS' sample files, each 5 seconds long
-    N_SECS = 5
     LENGTH = N_SECS*BITRATE if not args.debug else 160
-
+    if FLAG_GEN: LENGTH = 785*80 #1271*80 #1237*80 #1187*80 #1167*80 #660*80
+    
     samples = numpy.zeros((N_SEQS, LENGTH), dtype='int32')
     
     if FLAG_USETRAIN_WHENTEST:
@@ -986,6 +1009,17 @@ big_h0 = numpy.zeros((BATCH_SIZE, N_RNN_LIST[0], H0_MULT*BIG_DIM), dtype='float3
 
 # Initial load train dataset
 tr_feeder = load_data(train_feeder)
+
+
+if FLAG_GEN:
+    print('---loading gen_para.pkl---')
+    lib.load_params(GEN_DIRFILE)
+    print('---loading complete---')
+    print('sampling')
+    tmp = GEN_DIRFILE.split('/')[-1]
+    generate_and_save_samples(tmp)
+    print('ok')
+    sys.exit()
 
 ### start from uncon
 if (UCINIT_DIRFILE != 'flat_start' and not RESUME):

@@ -71,15 +71,21 @@ if FLAG_NORMED_ALRDY:
             __speech_file = 'speech/manuCutAlign_f32_norm_rmDC/speech_{}.npy'  # normed on cps level: zero mean
             #__speech_file = 'speech/manuAlign_float32_cutEnd_norm/speech_{}.npy'  # in float16 8secs*16000samples/sec
         __speech_file_lab = 'speech/lab_norm_01_train/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
+        if flag_dict['ACOUSTIC']:
+            __speech_file_lab = 'speech/MA_traj_8s_norm/speech_{}_traj.npy'  # Nick data
     if WHICH_SET == 'LESLEY':
         __speech_file = 'speech/ln_16k_resil_Lesley_norm_utt/speech_{}.npy'  # lesley data
         __speech_file_lab = 'speech/ln_16k_resil_Lesley_lab_norm/speech_{}_lab.npy'  # lesley data
+        if flag_dict['ACOUSTIC']:
+            __speech_file_lab = 'speech/BLSTM_resil_Lesley_traj_full/speech_{}_traj.npy'  # lesley data
 else:
     if WHICH_SET == 'SPEECH':
         __speech_file = 'speech/manuAlign_float32_cutEnd/speech_{}.npy'  # in float16 8secs*16000samples/sec
         __speech_file_lab = 'speech/lab_norm_01_train/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
         # __speech_file = 'speech/MA_f32_CE_5s/speech_{}.npy'
         # __speech_file_lab = 'speech/lab_norm_01_train_5s/speech_{}_lab.npy'  # in float16 5secs*16000samples/sec
+        if flag_dict['ACOUSTIC']:
+            __speech_file_lab = 'speech/MA_traj_8s_norm/speech_{}_traj.npy'  # Nick data
     if WHICH_SET == 'LESLEY':
         # __speech_file = 'speech/16k_resil_Lesley/speech_{}.npy'  # lesley data, changed dir, should be replaced by the following line
         __speech_file = 'speech/16k_resil_Lesley_full/speech_{}.npy'  # lesley data
@@ -89,10 +95,10 @@ else:
             # __speech_file_lab = 'speech/BLSTM_resil_Lesley_traj/speech_{}_traj.npy'  # lesley data
             __speech_file = 'speech/16k_resil_Lesley_full/speech_{}.npy'
             __speech_file_lab = 'speech/BLSTM_resil_Lesley_traj_full/speech_{}_traj.npy'  # lesley data
-
-print 'dir for wav and lab:'
-print __speech_file
-print __speech_file_lab
+    
+# print 'dir for wav and lab:'
+# print __speech_file
+# print __speech_file_lab
 
 # pdb.set_trace()
 
@@ -112,6 +118,10 @@ __speech_train_mean_std = np.array([6.6694896289095623e-07,
 __train = lambda s: s.format('train')
 __valid = lambda s: s.format('valid')
 __test = lambda s: s.format('test')
+
+if flag_dict['GEN']:
+    __test = lambda s: s.format('test').replace('.npy','_gen.npy')
+    
 
 
 def find_dataset(filename):
@@ -282,11 +292,21 @@ def upsample(input_sequences_lab,up_rate):
     frames_lab = f_upsample(time_lab_up)
     return frames_lab
 
+# def get_files_init(batch,overlap):
+#     tmp = batch[:-1,-overlap:]
+#     #row1 = numpy.full((1, overlap), 0, dtype='float32')
+#     row1 = batch[0:1,:overlap]
+#     tmp = numpy.concatenate((row1,tmp),axis=0)
+#     return tmp
+
 def get_files_init(batch,overlap):
-    tmp = batch[:-1,-overlap:]
-    #row1 = numpy.full((1, overlap), 0, dtype='float32')
-    row1 = batch[0:1,:overlap]
-    tmp = numpy.concatenate((row1,tmp),axis=0)
+    if flag_dict['GEN']:
+        row1 = batch[0:1,:overlap]
+        tmp = numpy.matlib.repmat(row1, batch.shape[0], 1)
+    else:
+        tmp = batch[:-1,-overlap:]
+        row1 = batch[0:1,:overlap]
+        tmp = numpy.concatenate((row1,tmp),axis=0)
     return tmp
 ### SPEECH DATASET LOADER ###
 def __speech_feed_epoch(files,
@@ -338,7 +358,6 @@ def __speech_feed_epoch(files,
     batches = __make_random_batches(files, batch_size)
     batches_lab = __make_random_batches(files_lab, batch_size)
     
-
     assert seq_len % lab_len == 0,\
     'seq_len should be divisible by lab_len'
     
