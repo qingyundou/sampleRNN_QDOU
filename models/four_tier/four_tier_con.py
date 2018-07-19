@@ -116,9 +116,7 @@ def get_args():
             or mu-law compandig. With mu-/a-law quantization level shoud be set as 256',\
             choices=['linear', 'a-law', 'mu-law'], required=True)
     parser.add_argument('--which_set', help='ONOM, BLIZZ, MUSIC, or HUCK, or SPEECH',
-            choices=['ONOM', 'BLIZZ', 'MUSIC', 'HUCK', 'SPEECH', 'LESLEY'], required=True)
-    # parser.add_argument('--batch_size', help='size of mini-batch',
-    #         type=check_positive, choices=[1,5, 20, 64, 80, 128, 256], required=True)
+            choices=['ONOM', 'BLIZZ', 'MUSIC', 'HUCK', 'SPEECH', 'LESLEY','NANCY','VCBK'], required=True)
     parser.add_argument('--batch_size', help='size of mini-batch',type=int, required=True)
 
     parser.add_argument('--debug', help='Debug mode', required=False, default=False, action='store_true')
@@ -157,6 +155,9 @@ def get_args():
     
     parser.add_argument('--acoustic', help='use acoustic features',required=False, default=False, action='store_true')
     parser.add_argument('--gen', help='pkl for strict synthesis',type=str, required=False, default='not_gen')
+    parser.add_argument('--ft', help='fine tune', type=float, required=False, default=0)
+    
+    parser.add_argument('--split', help='split data',required=False, default=False, action='store_true')
 
 
     args = parser.parse_args()
@@ -169,7 +170,7 @@ def get_args():
     print tag
     
     #deal with pb - dir name too long
-    tag = tag.replace('-which_setSPEECH','').replace('size','sz').replace('frame','fr').replace('batch','bch').replace('-grid', '').replace('acousitc', 'ac').replace('-which_setLESLEY', '')
+    tag = tag.replace('-which_setSPEECH','').replace('size','sz').replace('frame','fr').replace('batch','bch').replace('-grid', '').replace('acousitc', 'ac').replace('-which_setLESLEY', '').replace('-which_setNANCY', '').replace('-which_setVCBK', '')
     
 
     return args, tag
@@ -247,14 +248,20 @@ flag_dict['QUANTLAB'] = args.quantlab
 flag_dict['WHICH_SET'] = args.which_set
 flag_dict['ACOUSTIC'] = args.acoustic
 flag_dict['GEN'] = FLAG_GEN
+flag_dict['FT'] = (args.ft!=0)
+flag_dict['SPLIT'] = (args.split)
+
+para_dict = {}
+para_dict['FT'] = args.ft
 
 FLAG_QUANTLAB = flag_dict['QUANTLAB']
 LAB_SIZE = 80 #one label covers 80 points on waveform
 LAB_PERIOD = float(0.005) #one label covers 0.005s ~ 200Hz
 LAB_DIM = 601
 if flag_dict['ACOUSTIC']:
-    if WHICH_SET=='SPEECH': LAB_DIM = 163
+    if WHICH_SET in ['SPEECH','NANCY']: LAB_DIM = 163
     elif WHICH_SET=='LESLEY': LAB_DIM = 85
+    elif WHICH_SET=='VCBK': LAB_DIM = 86
 UP_RATE = LAB_SIZE/FRAME_SIZE_2
 
 FLAG_TIER_TRAIN_UP = args.tt=='UP'
@@ -284,9 +291,9 @@ TRAIN_MODE = 'iters-time'
 # STOP_ITERS = 20 # Stop after this many iterations
 
 #for real
-PRINT_ITERS = 6400*40 # Print cost, generate samples, save model checkpoint every N iterations.
-STOP_ITERS = 6400*40 # Stop after this many iterations
-
+PRINT_ITERS = 10000#6400*40 # Print cost, generate samples, save model checkpoint every N iterations.
+STOP_ITERS = 250000 if WHICH_SET!='VCBK' else 400000 #6400*40 # Stop after this many iterations
+if flag_dict['FT']: STOP_ITERS = 100000
 
 PRINT_TIME = 60*60*24*5 # Print cost, generate samples, save model checkpoint every N seconds.
 STOP_TIME = 60*60*24*3 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
@@ -297,7 +304,7 @@ N_SECS = 5
 if FLAG_GEN:
     # N_SEQS = 10
     # N_SECS = 8 #LENGTH = 8*BITRATE #640*80
-    N_SEQS = 72 #60
+    N_SEQS = 72 if WHICH_SET=='SPEECH' else 50 #50 #32 #72 #60
     # N_SECS = 8 #LENGTH = 8*BITRATE #640*80
     
 ###
@@ -352,11 +359,14 @@ if WHICH_SET == 'ONOM':
     from datasets.dataset import onom_train_feed_epoch as train_feeder
     from datasets.dataset import onom_valid_feed_epoch as valid_feeder
     from datasets.dataset import onom_test_feed_epoch  as test_feeder
-elif WHICH_SET == 'SPEECH' or 'LESLEY':
+elif WHICH_SET == 'SPEECH' or 'LESLEY' or 'NANCY':
     from datasets.dataset_con import speech_train_feed_epoch as train_feeder
     from datasets.dataset_con import speech_valid_feed_epoch as valid_feeder
     from datasets.dataset_con import speech_test_feed_epoch  as test_feeder
-    
+else:
+    from datasets.dataset_con import speech_train_feed_epoch as train_feeder
+    from datasets.dataset_con import speech_valid_feed_epoch as valid_feeder
+    from datasets.dataset_con import speech_test_feed_epoch  as test_feeder
 # pdb.set_trace()
     
 def get_lab_big(seqs_lab,fr_sz=BIG_FRAME_SIZE):
@@ -849,13 +859,10 @@ FLAG_USETRAIN_WHENTEST = False
 def generate_and_save_samples(tag):
     def write_audio_file(name, data):
         data = data.astype('float32')
-        # data -= data.min()
-        # data /= data.max()
-        # data -= 0.5
-        # data *= 0.95
         data -= numpy.mean(data)
-        data /= numpy.absolute(data).max()
-        data /= 2.0
+        data /= numpy.absolute(data).max() # [-1,1]
+        data *= 32768
+        data = data.astype('int16')
         scipy.io.wavfile.write(
                     os.path.join(SAMPLES_PATH, name+'.wav'),
                     BITRATE,
@@ -864,7 +871,7 @@ def generate_and_save_samples(tag):
     total_time = time()
     # Generate N_SEQS' sample files, each 5 seconds long
     LENGTH = N_SECS*BITRATE if not args.debug else 160
-    if FLAG_GEN: LENGTH = 785*80 #1271*80 #1237*80 #1187*80 #1167*80 #660*80
+    if FLAG_GEN: LENGTH = 785*80 #1645*80 #8*BITRATE #785*80 #1271*80 #1237*80 #1187*80 #1167*80 #660*80
     
     samples = numpy.zeros((N_SEQS, LENGTH), dtype='int32')
     
@@ -1007,9 +1014,6 @@ h0_1 = numpy.zeros((BATCH_SIZE, N_RNN_LIST[1], H0_MULT*DIM), dtype='float32')
 h0_2 = numpy.zeros((BATCH_SIZE, N_RNN_LIST[2], H0_MULT*DIM), dtype='float32')
 big_h0 = numpy.zeros((BATCH_SIZE, N_RNN_LIST[0], H0_MULT*BIG_DIM), dtype='float32')
 
-# Initial load train dataset
-tr_feeder = load_data(train_feeder)
-
 
 if FLAG_GEN:
     print('---loading gen_para.pkl---')
@@ -1020,6 +1024,10 @@ if FLAG_GEN:
     generate_and_save_samples(tmp)
     print('ok')
     sys.exit()
+    
+    
+# Initial load train dataset
+tr_feeder = load_data(train_feeder)
 
 ### start from uncon
 if (UCINIT_DIRFILE != 'flat_start' and not RESUME):
@@ -1130,8 +1138,7 @@ while True:
     if (TRAIN_MODE=='iters' and total_iters-last_print_iters == PRINT_ITERS) or \
         (TRAIN_MODE=='time' and total_time-last_print_time >= PRINT_TIME) or \
         (TRAIN_MODE=='time-iters' and total_time-last_print_time >= PRINT_TIME) or \
-        (TRAIN_MODE=='iters-time' and total_iters-last_print_iters >= PRINT_ITERS) or \
-        end_of_batch:
+        (TRAIN_MODE=='iters-time' and total_iters-last_print_iters >= PRINT_ITERS):
         # 0. Validation
         print "\nValidation!",
         valid_cost, valid_time = monitor(valid_feeder)

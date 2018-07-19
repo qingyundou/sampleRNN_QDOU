@@ -56,6 +56,14 @@ else:
     if WHICH_SET == 'LESLEY':
         # __speech_file = 'speech/16k_resil_Lesley/speech_{}.npy'  # lesley data, changed dir, should be replaced by the following line
         __speech_file = 'speech/16k_resil_Lesley_full/speech_{}.npy'  # lesley data
+        
+        
+import sys
+sys.path.append('/home/dawna/tts/qd212/lib_QDOU')
+from HRNN import get_file_lab_str
+
+if WHICH_SET in ['NANCY','VCBK']:
+    __speech_file,_ = get_file_lab_str(flag_dict,WHICH_SET)
     
 __blizz_train_mean_std = np.array([0.0008558356760380169,
                                    0.098437514304141299],
@@ -318,8 +326,26 @@ def speech_train_feed_epoch(*args):
     find_dataset(__valid(__speech_file))
     find_dataset(__test(__speech_file))
     # Load train set
-    data_path = find_dataset(__train(__speech_file))
+    tmp = __train(__speech_file)
+    # if WHICH_SET=='VCBK':
+    if flag_dict['SPLIT']:
+        # idx = random.randint(0, 9)
+        idx = int(time.time())%10
+        tmp = tmp.replace('train','train_'+str(idx))
+        print('')
+        print('REMINDER: using split {} for training'.format(idx))
+        print('')
+    data_path = find_dataset(tmp)
     files = numpy.load(data_path)
+    
+    # #asup
+    # tmp_ft = 10
+    # nb_row = files.shape[0]
+    # files = files[:int(nb_row*tmp_ft/100)]
+    # print('')
+    # print('REMINDER: fine tuning using {}/100 of training data'.format(tmp_ft))
+    # print('')
+        
     generator = __speech_feed_epoch(files, *args)
     return generator
 

@@ -153,7 +153,7 @@ def get_args():
     
     #deal with pb - dir name too long
     #option2
-    tag = tag.replace('-which_setSPEECH','').replace('size','sz').replace('frame','fr').replace('batch','bch').replace('-grid', '')
+    tag = tag.replace('-which_setSPEECH','').replace('size','sz').replace('frame','fr').replace('batch','bch').replace('-grid', '').replace('-which_setNANCY', '')
     #tag += '-lr'+str(LEARNING_RATE)
     
 
@@ -750,13 +750,10 @@ fixed_rand_big_h0 = fixed_rand_big_h0.astype('float32')
 def generate_and_save_samples(tag):
     def write_audio_file(name, data):
         data = data.astype('float32')
-        # data -= data.min()
-        # data /= data.max()
-        # data -= 0.5
-        # data *= 0.95
         data -= numpy.mean(data)
-        data /= numpy.absolute(data).max()
-        data /= 2.0
+        data /= numpy.absolute(data).max() # [-1,1]
+        data *= 32768
+        data = data.astype('int16')
         scipy.io.wavfile.write(
                     os.path.join(SAMPLES_PATH, name+'.wav'),
                     BITRATE,

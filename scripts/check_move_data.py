@@ -27,7 +27,8 @@ tgt_all_dataset_list = os.listdir(tgt_all_dataset_dir)
 #1.2 if not already there, make dir and move data
 #loop over src, if not found in tgt, copy
 for dataset in src_all_dataset_list:
-    if dataset in ['manuCutAlign_f32_norm_rmDC','lab_norm_01_train','MA_traj_8s_norm']:
+    if dataset in ['MA_8s_norm_NCY','MA_traj_8s_norm_NCY']+['manuCutAlign_f32_norm_rmDC','lab_norm_01_train','MA_traj_8s_norm']:
+    # if dataset in ['manuCutAlign_f32_norm_rmDC','lab_norm_01_train','MA_traj_8s_norm']:
     # if dataset in ['ln_16k_resil_Lesley_lab_norm','BLSTM_resil_Lesley_traj_full','ln_16k_resil_Lesley_norm_utt']:
         t = os.path.join(tgt_all_dataset_dir,dataset)
         cmd = 'rm -r {}'.format(t)

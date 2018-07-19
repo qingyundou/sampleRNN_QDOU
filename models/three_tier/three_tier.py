@@ -28,7 +28,7 @@ exp_start = time()
 
 import os, sys, glob
 sys.path.insert(1, os.getcwd())
-import argparse
+# import argparse
 import itertools
 
 import numpy
@@ -45,118 +45,18 @@ import scipy.io.wavfile
 
 import lib
 
-#import pdb
+import sys
+sys.path.append('/home/dawna/tts/qd212/lib_QDOU')
+from HRNN import get_args_3t as get_args
+from HRNN import get_flag_dict
+
+import pdb
 
 LEARNING_RATE = 0.001
 
 ### Parsing passed args/hyperparameters ###
-def get_args():
-    def t_or_f(arg):
-        ua = str(arg).upper()
-        if 'TRUE'.startswith(ua):
-            return True
-        elif 'FALSE'.startswith(ua):
-            return False
-        else:
-           raise ValueError('Arg is neither `True` nor `False`')
-
-    def check_non_negative(value):
-        ivalue = int(value)
-        if ivalue < 0:
-             raise argparse.ArgumentTypeError("%s is not non-negative!" % value)
-        return ivalue
-
-    def check_positive(value):
-        ivalue = int(value)
-        if ivalue < 1:
-             raise argparse.ArgumentTypeError("%s is not positive!" % value)
-        return ivalue
-
-    def check_unit_interval(value):
-        fvalue = float(value)
-        if fvalue < 0 or fvalue > 1:
-             raise argparse.ArgumentTypeError("%s is not in [0, 1] interval!" % value)
-        return fvalue
-
-    # No default value here. Indicate every single arguement.
-    parser = argparse.ArgumentParser(
-        description='three_tier.py\nNo default value! Indicate every argument.')
-
-    # TODO: Fix the descriptions
-    # Hyperparameter arguements:
-    parser.add_argument('--exp', help='Experiment name',
-            type=str, required=False, default='_')
-    parser.add_argument('--seq_len', help='How many samples to include in each\
-            Truncated BPTT pass', type=check_positive, required=True)
-    parser.add_argument('--big_frame_size', help='How many samples per big frame',\
-            type=check_positive, required=True)
-    parser.add_argument('--frame_size', help='How many samples per frame',\
-            type=check_positive, required=True)
-    parser.add_argument('--weight_norm', help='Adding learnable weight normalization\
-            to all the linear layers (except for the embedding layer)',\
-            type=t_or_f, required=True)
-    parser.add_argument('--emb_size', help='Size of embedding layer (> 0)',
-            type=check_positive, required=True)  # different than two_tier
-    parser.add_argument('--skip_conn', help='Add skip connections to RNN',
-            type=t_or_f, required=True)
-    parser.add_argument('--dim', help='Dimension of RNN and MLPs',\
-            type=check_positive, required=True)
-    parser.add_argument('--n_rnn', help='Number of layers in the stacked RNN',
-            type=check_positive, choices=xrange(1,6), required=True)
-    parser.add_argument('--rnn_type', help='GRU or LSTM', choices=['LSTM', 'GRU'],\
-            required=True)
-    parser.add_argument('--learn_h0', help='Whether to learn the initial state of RNN',\
-            type=t_or_f, required=True)
-    parser.add_argument('--q_levels', help='Number of bins for quantization of\
-            audio samples. Should be 256 for mu-law.',\
-            type=check_positive, required=True)
-    parser.add_argument('--q_type', help='Quantization in linear-scale, a-law-companding,\
-            or mu-law compandig. With mu-/a-law quantization level shoud be set as 256',\
-            choices=['linear', 'a-law', 'mu-law'], required=True)
-    parser.add_argument('--which_set', help='ONOM, BLIZZ, MUSIC, or HUCK, or SPEECH',
-            choices=['ONOM', 'BLIZZ', 'MUSIC', 'HUCK', 'SPEECH', 'LESLEY'], required=True)
-    parser.add_argument('--batch_size', help='size of mini-batch',type=int, required=True)
-
-    parser.add_argument('--debug', help='Debug mode', required=False, default=False, action='store_true')
-    parser.add_argument('--resume', help='Resume the same model from the last\
-            checkpoint. Order of params are important. [for now]',\
-            required=False, default=False, action='store_true')
-    
-    parser.add_argument('--n_big_rnn', help='For tier3, Number of layers in the stacked RNN',\
-            type=check_positive, choices=xrange(1,6), required=False, default=0)
-    
-    parser.add_argument('--rmzero', help='remove q_zero, start from real data',\
-            required=False, default=False, action='store_true')
-    parser.add_argument('--normed', help='normalize data on corpus level',\
-            required=False, default=False, action='store_true')
-    parser.add_argument('--utt', help='normalize data on utt level',\
-            required=False, default=False, action='store_true')
-    parser.add_argument('--grid', help='use data on air',\
-            required=False, default=False, action='store_true')
-    
-    parser.add_argument('--frame_size_dnn', help='How many previous samples per setp for DNN',\
-            type=check_positive, required=False, default=0)
-
-    args = parser.parse_args()
-
-    # NEW
-    # Create tag for this experiment based on passed args
-    tag = reduce(lambda a, b: a+b, sys.argv).replace('--resume', '').replace('/', '-').replace('--', '-').replace('True', 'T').replace('False', 'F')
-    tag += '-lr'+str(LEARNING_RATE)
-    print "Created experiment tag for these args:"
-    print tag
-    
-    
-    #deal with pb - dir name too long
-    #option2
-    tag = tag.replace('-which_setSPEECH','').replace('size','sz').replace('frame','fr').replace('batch','bch').replace('-grid', '')
-    tag = tag.replace('-which_setLESLEY','')
-    #tag += '-lr'+str(LEARNING_RATE)
-    
-
-    return args, tag
-
 args, tag = get_args()
+# pdb.set_trace()
 
 SEQ_LEN = args.seq_len # How many samples to include in each truncated BPTT pass
 #print "------------------previous SEQ_LEN:", SEQ_LEN
@@ -201,12 +101,7 @@ if Q_TYPE == 'mu-law' and Q_LEVELS != 256:
     
 
 ###set FLAGS for options
-flag_dict = {}
-flag_dict['RMZERO'] = args.rmzero
-flag_dict['NORMED_ALRDY'] = args.normed
-flag_dict['NORMED_UTT'] = args.utt
-flag_dict['GRID'] = args.grid
-flag_dict['WHICH_SET'] = args.which_set
+flag_dict = get_flag_dict(args)
 
 
 # Fixed hyperparams
@@ -222,17 +117,14 @@ BITRATE = 16000
 TRAIN_MODE = 'iters-time'
 # To use PRINT_ITERS for validation,
 # and (STOP_ITERS, STOP_TIME), whichever happened first, for stopping exp.
-# PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every N iterations.
-# STOP_ITERS = 100000 # Stop after this many iterations
+PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every N iterations.
+STOP_ITERS = 60000 # Stop after this many iterations
+if WHICH_SET == 'VCBK': STOP_ITERS = 100000
 
 # PRINT_ITERS = 3200 # Print cost, generate samples, save model checkpoint every N iterations.
-# STOP_ITERS = 64000 # Stop after this many iterations
+# STOP_ITERS = 64009 # Stop after this many iterations
 
-PRINT_ITERS = 32000000 # Print cost, generate samples, save model checkpoint every N iterations.
-STOP_ITERS = 64009 # Stop after this many iterations
-
-
-PRINT_TIME = 72*60*60 # Print cost, generate samples, save model checkpoint every N seconds.
+PRINT_TIME = 60*60*24*3 # Print cost, generate samples, save model checkpoint every N seconds.
 STOP_TIME = 60*60*24*2 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
 N_SEQS = 5  # Number of samples to generate every time monitoring.
 ###
@@ -296,11 +188,7 @@ elif WHICH_SET == 'HUCK':
     from datasets.dataset import huck_train_feed_epoch as train_feeder
     from datasets.dataset import huck_valid_feed_epoch as valid_feeder
     from datasets.dataset import huck_test_feed_epoch  as test_feeder
-elif WHICH_SET == 'SPEECH':
-    from datasets.dataset import speech_train_feed_epoch as train_feeder
-    from datasets.dataset import speech_valid_feed_epoch as valid_feeder
-    from datasets.dataset import speech_test_feed_epoch  as test_feeder
-elif WHICH_SET == 'LESLEY':
+elif WHICH_SET == 'SPEECH' or 'LESLEY' or 'NANCY':
     from datasets.dataset import speech_train_feed_epoch as train_feeder
     from datasets.dataset import speech_valid_feed_epoch as valid_feeder
     from datasets.dataset import speech_test_feed_epoch  as test_feeder
@@ -718,13 +606,10 @@ fixed_rand_big_h0 = fixed_rand_big_h0.astype('float32')
 def generate_and_save_samples(tag):
     def write_audio_file(name, data):
         data = data.astype('float32')
-        # data -= data.min()
-        # data /= data.max()
-        # data -= 0.5
-        # data *= 0.95
         data -= numpy.mean(data)
-        data /= numpy.absolute(data).max()
-        data /= 2.0
+        data /= numpy.absolute(data).max() # [-1,1]
+        data *= 32768
+        data = data.astype('int16')
         scipy.io.wavfile.write(
                     os.path.join(SAMPLES_PATH, name+'.wav'),
                     BITRATE,
@@ -905,8 +790,7 @@ while True:
     if (TRAIN_MODE=='iters' and total_iters-last_print_iters == PRINT_ITERS) or \
         (TRAIN_MODE=='time' and total_time-last_print_time >= PRINT_TIME) or \
         (TRAIN_MODE=='time-iters' and total_time-last_print_time >= PRINT_TIME) or \
-        (TRAIN_MODE=='iters-time' and total_iters-last_print_iters >= PRINT_ITERS) or \
-        end_of_batch:
+        (TRAIN_MODE=='iters-time' and total_iters-last_print_iters >= PRINT_ITERS):
         # 0. Validation
         print "\nValidation!",
         valid_cost, valid_time = monitor(valid_feeder)

@@ -35,6 +35,13 @@ except ImportError:
 # else:
 #     print "Non-ImportError: cannot import name flag_dict"
 
+try:
+    from __main__ import para_dict
+except ImportError:
+    print "ImportError: cannot import name para_dict, maybe model.py wasnt run; using defalut para_dict: ft=100"
+    para_dict = {}
+    para_dict['FT'] = 0
+
 FLAG_DIVLAB = False
 FLAG_LESSDATA_DEBUG = False
 FLAG_QUANTLAB = flag_dict['QUANTLAB']
@@ -47,11 +54,17 @@ FLAG_NORMED_ALRDY = flag_dict['NORMED_ALRDY']
 try:
     FLAG_NORMED_UTT = flag_dict['NORMED_UTT']
 except KeyError:
-    print "KeyError: maybe NORMED_UTT was not defined in main code"
+    print "KeyError: maybe NORMED_UTT was not defined in main code, setting it to false"
     FLAG_NORMED_UTT = False
 # else:
 #     print "other error"
 #     FLAG_NORMED_UTT = False
+
+try:
+    FLAG_FT = flag_dict['FT']
+except KeyError:
+    print "KeyError: maybe FT was not defined in main code, setting it to false"
+    FLAG_FT = False
 
 FLAG_GRID = flag_dict['GRID']
 if FLAG_GRID:
@@ -73,6 +86,9 @@ if FLAG_NORMED_ALRDY:
         __speech_file_lab = 'speech/lab_norm_01_train/speech_{}_lab.npy'  # in float16 8secs*16000samples/sec
         if flag_dict['ACOUSTIC']:
             __speech_file_lab = 'speech/MA_traj_8s_norm/speech_{}_traj.npy'  # Nick data
+            if FLAG_FT:
+                __speech_file = 'speech/MA_8s_norm_NCY/speech_{}.npy'  # normed on utt level: zero mean, increased volume
+                __speech_file_lab = 'speech/MA_traj_8s_norm_NCY/speech_{}_traj.npy'  # Nick data
     if WHICH_SET == 'LESLEY':
         __speech_file = 'speech/ln_16k_resil_Lesley_norm_utt/speech_{}.npy'  # lesley data
         __speech_file_lab = 'speech/ln_16k_resil_Lesley_lab_norm/speech_{}_lab.npy'  # lesley data
@@ -95,6 +111,13 @@ else:
             # __speech_file_lab = 'speech/BLSTM_resil_Lesley_traj/speech_{}_traj.npy'  # lesley data
             __speech_file = 'speech/16k_resil_Lesley_full/speech_{}.npy'
             __speech_file_lab = 'speech/BLSTM_resil_Lesley_traj_full/speech_{}_traj.npy'  # lesley data
+            
+import sys
+sys.path.append('/home/dawna/tts/qd212/lib_QDOU')
+from HRNN import get_file_lab_str
+
+if WHICH_SET in ['NANCY','VCBK']:
+    __speech_file,__speech_file_lab = get_file_lab_str(flag_dict,WHICH_SET)
     
 # print 'dir for wav and lab:'
 # print __speech_file
@@ -456,10 +479,42 @@ def speech_train_feed_epoch(*args):
     find_dataset(__valid(__speech_file))
     find_dataset(__test(__speech_file))
     # Load train set
-    data_path = find_dataset(__train(__speech_file))
+    tmp = __train(__speech_file)
+    tmp_lab = __train(__speech_file_lab)
+    # if WHICH_SET=='VCBK':
+    if flag_dict['SPLIT']:
+        # idx = random.randint(0, 9)
+        idx = int(time.time())%10
+        tmp = tmp.replace('train','train_'+str(idx))
+        tmp_lab = tmp_lab.replace('train','train_'+str(idx))
+        print('')
+        print('REMINDER: using split {} for training'.format(idx))
+        print('')
+        
+    data_path = find_dataset(tmp)
     files = numpy.load(data_path)
-    data_path = find_dataset(__train(__speech_file_lab))
+    data_path = find_dataset(tmp_lab)
     files_lab = numpy.load(data_path)
+    
+    if FLAG_FT:
+        tmp_ft = para_dict['FT']
+        nb_row = files.shape[0]
+        files = files[:int(nb_row*tmp_ft/100)]
+        files_lab = files_lab[:int(nb_row*tmp_ft/100)]
+        print('')
+        print('REMINDER: fine tuning using {}/100 of training data'.format(tmp_ft))
+        print('')
+    
+    # #asup
+    # if WHICH_SET=='SPEECH':
+    #     tmp_ft = 10
+    #     nb_row = files.shape[0]
+    #     files = files[:int(nb_row*tmp_ft/100)]
+    #     files_lab = files_lab[:int(nb_row*tmp_ft/100)]
+    #     print('')
+    #     print('REMINDER: fine tuning using {}/100 of training data'.format(tmp_ft))
+    #     print('')
+        
     generator = __speech_feed_epoch(files, files_lab, *args)
     if FLAG_LESSDATA_DEBUG:
         print('')

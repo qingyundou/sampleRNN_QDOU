@@ -19,7 +19,8 @@ results_4t/
 results_smallExp/
 
 datasets/speech/
-
+datasets/nancy/
+datasets/voicebank/
 #grid job log file
 *.sh.*
 scripts/*.txt
