@@ -126,8 +126,9 @@ BITRATE = 16000
 TRAIN_MODE = 'iters-time'
 # To use PRINT_ITERS for validation,
 # and (STOP_ITERS, STOP_TIME), whichever happened first, for stopping exp.
-PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every N iterations.
-STOP_ITERS = 200000 # Stop after this many iterations
+PRINT_ITERS = 50000 # Print cost, generate samples, save model checkpoint every N iterations.
+STOP_ITERS = 800000 if WHICH_SET=='VCBK' else 600000 # WH Stop after this many iterations
+
 PRINT_TIME = 60*60*24*3 # Print cost, generate samples, save model checkpoint every N seconds.
 STOP_TIME = 60*60*24*3.5 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
 N_SEQS = 5  # Number of samples to generate every time monitoring.
@@ -148,7 +149,7 @@ LAB_SIZE = 80 #one label covers 80 points on waveform
 LAB_PERIOD = float(0.005) #one label covers 0.005s ~ 200Hz
 LAB_DIM = 601
 if flag_dict['ACOUSTIC']:
-    if WHICH_SET in ['SPEECH','NANCY']: LAB_DIM = 163
+    if WHICH_SET in ['SPEECH','NANCY']: LAB_DIM = 163 #86 #163
     elif WHICH_SET=='LESLEY': LAB_DIM = 85
     elif WHICH_SET=='VCBK': LAB_DIM = 86
 UP_RATE = LAB_SIZE/FRAME_SIZE
@@ -191,23 +192,27 @@ lib.print_model_settings(locals(), path=FOLDER_PREFIX, sys_arg=True)
 
 ### Import the data_feeder ###
 # Handling WHICH_SET
-if WHICH_SET == 'ONOM':
+if WHICH_SET == 'MUSIC':
     from datasets.dataset import onom_train_feed_epoch as train_feeder
     from datasets.dataset import onom_valid_feed_epoch as valid_feeder
     from datasets.dataset import onom_test_feed_epoch  as test_feeder
-elif WHICH_SET == 'BLIZZ':
-    from datasets.dataset import blizz_train_feed_epoch as train_feeder
-    from datasets.dataset import blizz_valid_feed_epoch as valid_feeder
-    from datasets.dataset import blizz_test_feed_epoch  as test_feeder
-elif WHICH_SET == 'MUSIC':
-    from datasets.dataset import music_train_feed_epoch as train_feeder
-    from datasets.dataset import music_valid_feed_epoch as valid_feeder
-    from datasets.dataset import music_test_feed_epoch  as test_feeder
-elif WHICH_SET == 'HUCK':
-    from datasets.dataset import huck_train_feed_epoch as train_feeder
-    from datasets.dataset import huck_valid_feed_epoch as valid_feeder
-    from datasets.dataset import huck_test_feed_epoch  as test_feeder
-elif WHICH_SET == 'SPEECH' or 'LESLEY' or 'NANCY':
+elif WHICH_SET in ['SPEECH','LESLEY','NANCY']:
+    from datasets.dataset_con import speech_train_feed_epoch as train_feeder
+    from datasets.dataset_con import speech_valid_feed_epoch as valid_feeder
+    from datasets.dataset_con import speech_test_feed_epoch  as test_feeder
+elif WHICH_SET == 'VCBK':
+    if args.t4tr:
+        print 'train with test set'
+        from datasets.dataset_con import speech_test_feed_epoch as train_feeder
+    else:
+        from datasets.dataset_con import speech_train_feed_epoch as train_feeder
+    from datasets.dataset_con import speech_valid_feed_epoch as valid_feeder
+    if args.tr4t:
+        print 'test with train set'
+        from datasets.dataset_con import speech_train_feed_epoch  as test_feeder
+    else:
+        from datasets.dataset_con import speech_test_feed_epoch  as test_feeder
+else:
     from datasets.dataset_con import speech_train_feed_epoch as train_feeder
     from datasets.dataset_con import speech_valid_feed_epoch as valid_feeder
     from datasets.dataset_con import speech_test_feed_epoch  as test_feeder
@@ -913,7 +918,8 @@ while True:
     if (TRAIN_MODE=='iters' and total_iters-last_print_iters == PRINT_ITERS) or \
         (TRAIN_MODE=='time' and total_time-last_print_time >= PRINT_TIME) or \
         (TRAIN_MODE=='time-iters' and total_time-last_print_time >= PRINT_TIME) or \
-        (TRAIN_MODE=='iters-time' and total_iters-last_print_iters >= PRINT_ITERS):
+        (TRAIN_MODE=='iters-time' and total_iters-last_print_iters >= PRINT_ITERS) or \
+        end_of_batch and epoch==1:
         # 0. Validation
         print "\nValidation!",
         valid_cost, valid_time = monitor(valid_feeder)

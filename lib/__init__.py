@@ -469,6 +469,15 @@ def resumable(path,
             if e == 1:
                 iters_per_epoch = i - 1
                 break
+        
+        #added by QDOU
+        try:
+            iters_per_epoch
+        except NameError:
+            print "well, iters_per_epoch WASN'T defined!"
+            iters_per_epoch = int(i/e)
+        #added by QDOU
+        
         iters_to_consume = last_iter % iters_per_epoch
 
     last_other_keys = [log[k][-1] for k in other_keys]

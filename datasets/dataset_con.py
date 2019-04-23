@@ -38,7 +38,7 @@ except ImportError:
 try:
     from __main__ import para_dict
 except ImportError:
-    print "ImportError: cannot import name para_dict, maybe model.py wasnt run; using defalut para_dict: ft=100"
+    print "ImportError: cannot import name para_dict, maybe model.py wasnt run; using defalut para_dict: ft=0"
     para_dict = {}
     para_dict['FT'] = 0
 
@@ -65,6 +65,12 @@ try:
 except KeyError:
     print "KeyError: maybe FT was not defined in main code, setting it to false"
     FLAG_FT = False
+    
+try:
+    FLAG_TR4T = flag_dict['TR4T']
+except KeyError:
+    print "KeyError: maybe TR4T was not defined in main code, setting it to false"
+    FLAG_TR4T = False
 
 FLAG_GRID = flag_dict['GRID']
 if FLAG_GRID:
@@ -490,6 +496,14 @@ def speech_train_feed_epoch(*args):
         print('')
         print('REMINDER: using split {} for training'.format(idx))
         print('')
+    
+    if FLAG_TR4T and WHICH_SET=='VCBK':
+        idx = 0
+        tmp = tmp.replace('train','train_'+str(idx))
+        tmp_lab = tmp_lab.replace('train','train_'+str(idx))
+        print('')
+        print('REMINDER: always using split {} for training'.format(idx))
+        print('')
         
     data_path = find_dataset(tmp)
     files = numpy.load(data_path)
@@ -504,16 +518,6 @@ def speech_train_feed_epoch(*args):
         print('')
         print('REMINDER: fine tuning using {}/100 of training data'.format(tmp_ft))
         print('')
-    
-    # #asup
-    # if WHICH_SET=='SPEECH':
-    #     tmp_ft = 10
-    #     nb_row = files.shape[0]
-    #     files = files[:int(nb_row*tmp_ft/100)]
-    #     files_lab = files_lab[:int(nb_row*tmp_ft/100)]
-    #     print('')
-    #     print('REMINDER: fine tuning using {}/100 of training data'.format(tmp_ft))
-    #     print('')
         
     generator = __speech_feed_epoch(files, files_lab, *args)
     if FLAG_LESSDATA_DEBUG:

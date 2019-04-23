@@ -117,9 +117,8 @@ BITRATE = 16000
 TRAIN_MODE = 'iters-time'
 # To use PRINT_ITERS for validation,
 # and (STOP_ITERS, STOP_TIME), whichever happened first, for stopping exp.
-PRINT_ITERS = 10000 # Print cost, generate samples, save model checkpoint every N iterations.
-STOP_ITERS = 60000 # Stop after this many iterations
-if WHICH_SET == 'VCBK': STOP_ITERS = 100000
+PRINT_ITERS = 50000 # Print cost, generate samples, save model checkpoint every N iterations.
+STOP_ITERS = 600001 if WHICH_SET=='VCBK' else 100001 # Stop after this many iterations
 
 # PRINT_ITERS = 3200 # Print cost, generate samples, save model checkpoint every N iterations.
 # STOP_ITERS = 64009 # Stop after this many iterations
@@ -790,7 +789,8 @@ while True:
     if (TRAIN_MODE=='iters' and total_iters-last_print_iters == PRINT_ITERS) or \
         (TRAIN_MODE=='time' and total_time-last_print_time >= PRINT_TIME) or \
         (TRAIN_MODE=='time-iters' and total_time-last_print_time >= PRINT_TIME) or \
-        (TRAIN_MODE=='iters-time' and total_iters-last_print_iters >= PRINT_ITERS):
+        (TRAIN_MODE=='iters-time' and total_iters-last_print_iters >= PRINT_ITERS) or \
+        end_of_batch and epoch==1:
         # 0. Validation
         print "\nValidation!",
         valid_cost, valid_time = monitor(valid_feeder)

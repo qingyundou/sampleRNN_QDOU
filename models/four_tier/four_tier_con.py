@@ -259,7 +259,7 @@ LAB_SIZE = 80 #one label covers 80 points on waveform
 LAB_PERIOD = float(0.005) #one label covers 0.005s ~ 200Hz
 LAB_DIM = 601
 if flag_dict['ACOUSTIC']:
-    if WHICH_SET in ['SPEECH','NANCY']: LAB_DIM = 163
+    if WHICH_SET in ['SPEECH','NANCY']: LAB_DIM = 163 #86 #163
     elif WHICH_SET=='LESLEY': LAB_DIM = 85
     elif WHICH_SET=='VCBK': LAB_DIM = 86
 UP_RATE = LAB_SIZE/FRAME_SIZE_2
@@ -291,13 +291,13 @@ TRAIN_MODE = 'iters-time'
 # STOP_ITERS = 20 # Stop after this many iterations
 
 #for real
-PRINT_ITERS = 10000#6400*40 # Print cost, generate samples, save model checkpoint every N iterations.
-STOP_ITERS = 250000 if WHICH_SET!='VCBK' else 400000 #6400*40 # Stop after this many iterations
+PRINT_ITERS = 50000 #6400*40 # Print cost, generate samples, save model checkpoint every N iterations.
+STOP_ITERS = 2000000 if WHICH_SET in ['VCBK','NANCY'] else 800000 #800000 #500000 #250000 #6400*40 # Stop after this many iterations
 if flag_dict['FT']: STOP_ITERS = 100000
 
 PRINT_TIME = 60*60*24*5 # Print cost, generate samples, save model checkpoint every N seconds.
-STOP_TIME = 60*60*24*3 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
-if not RESUME: STOP_TIME = 60*60*24*3.5
+STOP_TIME = 60*60*24*4 # Stop after this many seconds of actual training (not including time req'd to generate samples etc.)
+if not RESUME: STOP_TIME = 60*60*24*4
 N_SEQS = 5  # Number of samples to generate every time monitoring.
 N_SECS = 5
 
@@ -305,6 +305,7 @@ if FLAG_GEN:
     # N_SEQS = 10
     # N_SECS = 8 #LENGTH = 8*BITRATE #640*80
     N_SEQS = 72 if WHICH_SET=='SPEECH' else 50 #50 #32 #72 #60
+    if WHICH_SET=='VCBK': N_SEQS = 18
     # N_SECS = 8 #LENGTH = 8*BITRATE #640*80
     
 ###
@@ -871,7 +872,8 @@ def generate_and_save_samples(tag):
     total_time = time()
     # Generate N_SEQS' sample files, each 5 seconds long
     LENGTH = N_SECS*BITRATE if not args.debug else 160
-    if FLAG_GEN: LENGTH = 785*80 #1645*80 #8*BITRATE #785*80 #1271*80 #1237*80 #1187*80 #1167*80 #660*80
+    if FLAG_GEN: LENGTH = 1645*80
+    #2056*80 #8*16000 #785*80 #1645*80 #8*BITRATE #785*80 #1271*80 #1237*80 #1187*80 #1167*80 #660*80
     
     samples = numpy.zeros((N_SEQS, LENGTH), dtype='int32')
     
@@ -1008,7 +1010,7 @@ new_lowest_cost = False
 end_of_batch = False
 epoch = 0
 
-cost_log_list = []
+# cost_log_list = []
 
 h0_1 = numpy.zeros((BATCH_SIZE, N_RNN_LIST[1], H0_MULT*DIM), dtype='float32')
 h0_2 = numpy.zeros((BATCH_SIZE, N_RNN_LIST[2], H0_MULT*DIM), dtype='float32')
@@ -1082,14 +1084,17 @@ if RESUME:
     # cost_log_list = lib.load_costs(dirFile)
     
     lib.load_updates(res_path,updates)
-    cost_log_list = lib.load_costs(PARAMS_PATH)
+    # cost_log_list = lib.load_costs(PARAMS_PATH)
     print "Updates from last available checkpoint loaded."
 
 FLAG_DEBUG_SAMPLE = False
 if FLAG_DEBUG_SAMPLE:
     print('debug: sampling')
+    # tag = 'sample_fakeInfo_e15_i10000'
     generate_and_save_samples(tag)
     print('debug: ok')
+    # print 'exiting'
+    # sys.exit()
 
 while True:
     # THIS IS ONE ITERATION
@@ -1132,13 +1137,14 @@ while True:
     #print "This cost:", cost, "This h0.mean()", h0.mean()
 
     costs.append(cost)
-    cost_log_list.append(cost)
+    # cost_log_list.append(cost)
 
     # Monitoring step
     if (TRAIN_MODE=='iters' and total_iters-last_print_iters == PRINT_ITERS) or \
         (TRAIN_MODE=='time' and total_time-last_print_time >= PRINT_TIME) or \
         (TRAIN_MODE=='time-iters' and total_time-last_print_time >= PRINT_TIME) or \
-        (TRAIN_MODE=='iters-time' and total_iters-last_print_iters >= PRINT_ITERS):
+        (TRAIN_MODE=='iters-time' and total_iters-last_print_iters >= PRINT_ITERS) or \
+        end_of_batch and epoch==1:
         # 0. Validation
         print "\nValidation!",
         valid_cost, valid_time = monitor(valid_feeder)
@@ -1200,7 +1206,7 @@ while True:
         # lib.save_updates(os.path.join(PARAMS_PATH, 'updates_{}.pkl'.format(tag)), updates)
         lib.save_updates(PARAMS_PATH,tag, updates)
         # lib.save_costs(os.path.join(PARAMS_PATH, 'costs.pkl'),cost_log_list)
-        lib.save_costs(PARAMS_PATH,cost_log_list)
+        # lib.save_costs(PARAMS_PATH,cost_log_list)
         print 'complete!'
 
         # 4. Save and graph training progress (fast)

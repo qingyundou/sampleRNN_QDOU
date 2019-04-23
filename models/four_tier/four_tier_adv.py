@@ -875,7 +875,7 @@ new_lowest_cost = False
 end_of_batch = False
 epoch = 0
 
-cost_log_list = []
+# cost_log_list = []
 
 h0_1 = numpy.zeros((BATCH_SIZE, N_RNN_LIST[1], H0_MULT*DIM), dtype='float32')
 h0_2 = numpy.zeros((BATCH_SIZE, N_RNN_LIST[2], H0_MULT*DIM), dtype='float32')
@@ -923,7 +923,7 @@ if RESUME:
     # cost_log_list = lib.load_costs(dirFile)
     
     lib.load_updates(res_path,updates)
-    cost_log_list = lib.load_costs(PARAMS_PATH)
+    # cost_log_list = lib.load_costs(PARAMS_PATH)
     print "Updates from last available checkpoint loaded."
 
 FLAG_DEBUG_SAMPLE = False
@@ -963,14 +963,14 @@ while True:
     #print "This cost:", cost, "This h0.mean()", h0.mean()
 
     costs.append(cost)
-    cost_log_list.append(cost)
+    # cost_log_list.append(cost)
 
     # Monitoring step
     if (TRAIN_MODE=='iters' and total_iters-last_print_iters == PRINT_ITERS) or \
         (TRAIN_MODE=='time' and total_time-last_print_time >= PRINT_TIME) or \
         (TRAIN_MODE=='time-iters' and total_time-last_print_time >= PRINT_TIME) or \
         (TRAIN_MODE=='iters-time' and total_iters-last_print_iters >= PRINT_ITERS) or \
-        end_of_batch:
+        end_of_batch and epoch==1:
         # 0. Validation
         print "\nValidation!",
         valid_cost, valid_time = monitor(valid_feeder)
@@ -1029,7 +1029,7 @@ while True:
         #save updates
         print 'saving updates, costs'
         lib.save_updates(PARAMS_PATH,tag, updates)
-        lib.save_costs(PARAMS_PATH,cost_log_list)
+        # lib.save_costs(PARAMS_PATH,cost_log_list)
         #v0
         # all_values = [item.get_value() for item in updates]
         # path = os.path.join(PARAMS_PATH, 'updates_%s'%(total_iters))
